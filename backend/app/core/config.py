@@ -1,0 +1,19 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    PROJECT_NAME: str = "GoMarg API"
+    VERSION: str = "0.1.0"
+    
+    POSTGRES_USER: str = "gomarg"
+    POSTGRES_PASSWORD: str = "gomarg_password"
+    POSTGRES_SERVER: str = "localhost"
+    POSTGRES_PORT: str = "5432"
+    POSTGRES_DB: str = "gomarg_db"
+
+    @property
+    def DATABASE_URL(self) -> str:
+        return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+settings = Settings()
