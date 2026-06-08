@@ -1,12 +1,26 @@
+import json
 from typing import Optional, List, Dict, Any
 from uuid import UUID
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+
+from app.core.config import settings
 from app.models.lead import Lead, ResearchDocument
+from app.models.ai import AIGeneration
+
+from google import genai
+from google.genai import types
+
+class ResearchInsights(BaseModel):
+    pain_points: List[str]
+    signals: List[str]
+    summary: str
 
 class AIResearchService:
     def __init__(self, session: AsyncSession):
         self.session = session
+        self.client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
 
     async def gather_lead_data(self, lead: Lead) -> Dict[str, Any]:
         """
@@ -21,8 +35,11 @@ class AIResearchService:
 
     async def generate_insights(self, lead_id: UUID, org_id: UUID) -> Dict[str, Any]:
         """
-        Core logic to perform AI research on a lead.
+        Core logic to perform AI research on a lead using Gemini.
         """
+        if not self.client:
+            raise ValueError("GEMINI_API_KEY is not configured.")
+
         # 1. Fetch Lead
         result = await self.session.execute(
             select(Lead).filter(Lead.id == lead_id, Lead.organization_id == org_id)
@@ -31,18 +48,45 @@ class AIResearchService:
         if not lead:
             raise ValueError("Lead not found")
 
-        # 2. Gather Data (Scraping)
+        # 2. Gather Data
         raw_data = await self.gather_lead_data(lead)
 
-        # 3. Call LLM (OpenAI/Gemini) to extract insights
-        # TODO: Inject the actual LLM call here once the provider is specified
-        insights = {
-            "pain_points": ["Scaling outbound", "Low reply rates"],
-            "signals": ["Hiring SDRs", "Recently raised Series A"],
-            "summary": f"{lead.first_name} is a target for our automation tool."
-        }
+        # 3. Call Gemini to extract insights
+        prompt = f"""
+        Analyze the following lead data and provide actionable sales insights.
+        Target Lead: {lead.first_name} {lead.last_name} at {lead.company}
+        Job Title: {lead.job_title}
+        
+        Raw Data Context:
+        {json.dumps(raw_data, indent=2)}
+        
+        Extract the key pain points they might face, buying/hiring signals, and a short summary tailored for an SDR.
+        """
 
-        # 4. Store Research Documents
+        response = self.client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=ResearchInsights,
+                temperature=0.2,
+            ),
+        )
+
+        insights = json.loads(response.text)
+
+        # 4. Log AI Generation
+        ai_log = AIGeneration(
+            organization_id=org_id,
+            lead_id=lead_id,
+            task_type="research",
+            provider="gemini",
+            model="gemini-2.5-flash",
+            output=insights
+        )
+        self.session.add(ai_log)
+
+        # 5. Store Research Documents
         docs = [
             ResearchDocument(
                 organization_id=org_id,
