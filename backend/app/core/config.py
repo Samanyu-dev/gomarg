@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     
     SECRET_KEY: str = "gomarg_super_secret_key_change_in_prod"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # 7 days
+    
+    BREVO_API_KEY: str = ""
+    BREVO_SENDER_EMAIL: str = "hello@gomarg.com"
 
     @property
     def DATABASE_URL(self) -> str:
