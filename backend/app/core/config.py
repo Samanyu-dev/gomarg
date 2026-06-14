@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     
     BREVO_API_KEY: str = ""
     BREVO_SENDER_EMAIL: str = "hello@gomarg.com"
+    
+    APOLLO_API_KEY: str = ""
 
     @property
     def DATABASE_URL(self) -> str:

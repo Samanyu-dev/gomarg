@@ -1,12 +1,61 @@
-from typing import List
-from fastapi import APIRouter, HTTPException, status
+from typing import List, Dict, Any
+from fastapi import APIRouter, HTTPException, status, UploadFile, File
 from sqlalchemy.future import select
 from app.api.deps import SessionDep, CurrentOrgIdDep
 from app.models.lead import Lead
 from app.schemas.lead import LeadCreate, LeadUpdate, LeadResponse
 from uuid import UUID
+import csv
+import io
 
 router = APIRouter(prefix="/leads", tags=["Leads"])
+
+@router.post("/import", response_model=Dict[str, Any], status_code=status.HTTP_201_CREATED)
+async def import_leads_csv(
+    session: SessionDep,
+    current_org_id: CurrentOrgIdDep,
+    file: UploadFile = File(...)
+):
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Only CSV files are allowed")
+
+    contents = await file.read()
+    decoded = contents.decode('utf-8')
+    reader = csv.DictReader(io.StringIO(decoded))
+    
+    # Expected columns: first_name, last_name, email, company, job_title, linkedin_url
+    imported_count = 0
+    skipped_count = 0
+
+    for row in reader:
+        email = row.get("email")
+        if not email:
+            skipped_count += 1
+            continue
+
+        # Basic duplicate check
+        result = await session.execute(
+            select(Lead).filter(Lead.email == email, Lead.organization_id == UUID(current_org_id))
+        )
+        if result.scalars().first():
+            skipped_count += 1
+            continue
+
+        new_lead = Lead(
+            organization_id=UUID(current_org_id),
+            first_name=row.get("first_name", ""),
+            last_name=row.get("last_name", ""),
+            email=email,
+            company=row.get("company", ""),
+            job_title=row.get("job_title", ""),
+            linkedin_url=row.get("linkedin_url", ""),
+            source="csv_import"
+        )
+        session.add(new_lead)
+        imported_count += 1
+
+    await session.commit()
+    return {"message": "Import complete", "imported": imported_count, "skipped": skipped_count}
 
 @router.post("/", response_model=LeadResponse, status_code=status.HTTP_201_CREATED)
 async def create_lead(lead_in: LeadCreate, session: SessionDep, current_org_id: CurrentOrgIdDep):
