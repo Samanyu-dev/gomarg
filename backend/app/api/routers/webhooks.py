@@ -42,3 +42,35 @@ async def brevo_webhook(request: Request, session: SessionDep):
     # await session.commit()
 
     return {"status": "success"}
+
+from pydantic import BaseModel
+from uuid import UUID
+from app.api.deps import CurrentOrgIdDep
+from app.services.reply_analysis import AIReplyAnalyzer
+
+class ReplySimulationRequest(BaseModel):
+    lead_id: UUID
+    email_text: str
+
+@router.post("/replies/simulate", status_code=status.HTTP_200_OK)
+async def simulate_reply_analysis(
+    request: ReplySimulationRequest,
+    session: SessionDep,
+    current_org_id: CurrentOrgIdDep
+):
+    """
+    Simulates an incoming reply from a lead and runs it through the AI Analyzer.
+    """
+    analyzer = AIReplyAnalyzer(session)
+    try:
+        analysis = await analyzer.analyze_reply(
+            lead_id=request.lead_id,
+            org_id=UUID(current_org_id),
+            email_text=request.email_text
+        )
+        return analysis
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Reply analysis failed: {str(e)}")
+
