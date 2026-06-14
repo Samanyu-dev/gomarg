@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 
 # Import routers
-from app.api.routers import organizations, users, leads, lead_lists, campaigns, research
+from app.api.routers import organizations, users, leads, lead_lists, campaigns, research, auth
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -20,6 +20,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(auth.router, prefix="/api/v1")
 app.include_router(organizations.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(leads.router, prefix="/api/v1")

@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "gomarg_db"
 
     GEMINI_API_KEY: str = ""
+    
+    SECRET_KEY: str = "gomarg_super_secret_key_change_in_prod"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # 7 days
 
     @property
     def DATABASE_URL(self) -> str:
