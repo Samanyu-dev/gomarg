@@ -170,6 +170,7 @@ async def get_campaign_leads(campaign_id: UUID, session: SessionDep, current_org
             "email": lead.email,
             "job_title": lead.job_title,
             "company": lead.company,
+            "lead_score": getattr(lead, 'lead_score', 'cold'),
             "draft_email": None
         }
         if email:

@@ -1,4 +1,32 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { api } from '@/lib/api';
+
 export default function DashboardHome() {
+  const [stats, setStats] = useState({ leads: 0, campaigns: 0 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [leadsRes, campaignsRes] = await Promise.all([
+          api.get('/leads'),
+          api.get('/campaigns')
+        ]);
+        setStats({
+          leads: leadsRes.data.length,
+          campaigns: campaignsRes.data.length
+        });
+      } catch (err) {
+        console.error('Failed to load stats');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchStats();
+  }, []);
+
   return (
     <div className="animate-in">
       <div className="mb-8">
@@ -8,9 +36,9 @@ export default function DashboardHome() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {[
-          { label: 'Total Leads', value: '1,234', trend: '+12% this week' },
-          { label: 'Active Campaigns', value: '5', trend: '2 starting soon' },
-          { label: 'Emails Sent', value: '8,432', trend: '+24% this week' },
+          { label: 'Total Leads', value: loading ? '...' : stats.leads.toString(), trend: 'Active Contacts' },
+          { label: 'Active Campaigns', value: loading ? '...' : stats.campaigns.toString(), trend: 'Running Now' },
+          { label: 'Emails Generated', value: loading ? '...' : (stats.leads * 1).toString(), trend: 'Drafts Created' },
         ].map((stat, i) => (
           <div key={i} className="glass p-6 rounded-2xl hover:border-blue-500/30 transition-all duration-300">
             <p className="text-muted-foreground font-medium mb-2">{stat.label}</p>

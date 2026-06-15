@@ -3,7 +3,9 @@ from typing import Dict, Any
 from fastapi import APIRouter, Request, BackgroundTasks
 from app.api.deps import SessionDep
 from app.models.email import Email, EmailEvent
+from app.models.lead import Lead
 from sqlalchemy.future import select
+from sqlalchemy import func
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 logger = logging.getLogger(__name__)
@@ -52,7 +54,39 @@ async def brevo_webhook(request: Request, session: SessionDep, background_tasks:
     session.add(event)
     await session.commit()
     
-    # We will trigger the classification engine here in a later step
+    # --- LEAD CLASSIFICATION ENGINE ---
+    # We count events for ALL emails sent to this lead
+    lead_events_result = await session.execute(
+        select(EmailEvent.event_type, func.count(EmailEvent.id))
+        .join(Email, Email.id == EmailEvent.email_id)
+        .filter(Email.lead_id == email.lead_id)
+        .group_by(EmailEvent.event_type)
+    )
     
+    event_counts = dict(lead_events_result.all())
+    opens = event_counts.get("opened", 0)
+    clicks = event_counts.get("clicked", 0)
+    
+    lead_result = await session.execute(select(Lead).filter(Lead.id == email.lead_id))
+    lead = lead_result.scalars().first()
+    
+    if lead:
+        new_score = "cold"
+        if clicks >= 1 or opens >= 3:
+            new_score = "hot"
+        elif opens == 2:
+            new_score = "warm"
+        elif opens == 1:
+            new_score = "low"
+            
+        if lead.lead_score != new_score:
+            logger.info(f"Lead {lead.id} classified as {new_score.upper()}")
+            lead.lead_score = new_score
+            # If hot, we could log an escalation action here
+            if new_score == "hot":
+                logger.info(f"🔥 HOT LEAD ALERT: {lead.email} has {opens} opens and {clicks} clicks!")
+                
+            await session.commit()
+            
     return {"status": "success"}
 

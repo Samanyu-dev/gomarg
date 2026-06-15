@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, ForeignKey, JSON, Integer
+from sqlalchemy import Column, String, ForeignKey, JSON, Integer, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from .base import BaseModel
@@ -23,6 +23,9 @@ class Lead(BaseModel):
     
     status = Column(String, default="new")
     score = Column(Integer, default=0)
+    lead_score = Column(String, default="cold") # cold, low, warm, hot
+    sequence_step = Column(Integer, default=0)
+    next_contact_at = Column(DateTime(timezone=True), nullable=True)
     source = Column(String)
 
     # Relationships
