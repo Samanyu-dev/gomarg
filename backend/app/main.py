@@ -5,9 +5,22 @@ from app.core.config import settings
 # Import routers
 from app.api.routers import organizations, users, leads, lead_lists, campaigns, research, auth, webhooks, generation, sourcing
 
+from contextlib import asynccontextmanager
+import asyncio
+from app.worker import autonomous_agent_loop
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start the autonomous background agent
+    task = asyncio.create_task(autonomous_agent_loop())
+    yield
+    # Cleanup task on shutdown
+    task.cancel()
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
+    lifespan=lifespan
 )
 
 # Set up CORS

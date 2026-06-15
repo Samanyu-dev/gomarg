@@ -47,3 +47,17 @@ class CampaignResponse(CampaignBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class CampaignLeadCreate(BaseModel):
+    lead_ids: List[UUID]
+
+class CampaignLeadResponse(BaseModel):
+    id: UUID
+    campaign_id: UUID
+    lead_id: UUID
+    status: str
+    current_step_id: Optional[UUID] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

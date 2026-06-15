@@ -118,6 +118,20 @@ class ApolloService:
                 company = contact.get("organization_name", "")
                 linkedin = contact.get("linkedin_url", "")
                 
+                # Extract extra data
+                phone_number = contact.get("sanitized_phone")
+                if not phone_number and contact.get("phone_numbers"):
+                    phone_number = contact["phone_numbers"][0].get("sanitized_number") or contact["phone_numbers"][0].get("raw_number")
+                if not phone_number:
+                    phone_number = contact.get("phone_number", "")
+                
+                city = contact.get("city", "")
+                state = contact.get("state", "")
+                country = contact.get("country", "")
+                # Some apollo contacts have organization object inside
+                org = contact.get("organization", {})
+                industry = org.get("industry") if org else contact.get("industry", "")
+                
                 # Prevent duplicates
                 existing_lead = await self.session.execute(
                     select(Lead).filter(Lead.email == email, Lead.organization_id == org_id)
@@ -134,6 +148,11 @@ class ApolloService:
                     company=company,
                     job_title=title,
                     linkedin_url=linkedin,
+                    phone_number=phone_number,
+                    city=city,
+                    state=state,
+                    country=country,
+                    industry=industry,
                     status="new"
                 )
                 self.session.add(new_lead)

@@ -11,6 +11,11 @@ class LeadBase(BaseModel):
     linkedin_url: Optional[str] = None
     company: Optional[str] = None
     job_title: Optional[str] = None
+    phone_number: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    industry: Optional[str] = None
     status: Optional[str] = "new"
     score: Optional[int] = 0
     source: Optional[str] = None

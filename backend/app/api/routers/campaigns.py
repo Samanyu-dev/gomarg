@@ -111,3 +111,73 @@ async def add_campaign_step(campaign_id: UUID, step_in: CampaignStepCreate, sess
     await session.commit()
     await session.refresh(new_step)
     return new_step
+
+from app.models.campaign import CampaignLead
+from app.models.lead import Lead
+from app.models.email import Email
+from app.schemas.campaign import CampaignLeadCreate
+
+@router.post("/{campaign_id}/leads", status_code=status.HTTP_200_OK)
+async def assign_leads_to_campaign(campaign_id: UUID, req: CampaignLeadCreate, session: SessionDep, current_org_id: CurrentOrgIdDep):
+    result = await session.execute(
+        select(Campaign).filter(Campaign.id == campaign_id, Campaign.organization_id == UUID(current_org_id))
+    )
+    if not result.scalars().first():
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    for lead_id in req.lead_ids:
+        # Check if already enrolled
+        existing = await session.execute(
+            select(CampaignLead).filter(CampaignLead.campaign_id == campaign_id, CampaignLead.lead_id == lead_id)
+        )
+        if not existing.scalars().first():
+            cl = CampaignLead(campaign_id=campaign_id, lead_id=lead_id)
+            session.add(cl)
+    await session.commit()
+    return {"message": f"Successfully enrolled {len(req.lead_ids)} leads."}
+
+@router.get("/{campaign_id}/leads")
+async def get_campaign_leads(campaign_id: UUID, session: SessionDep, current_org_id: CurrentOrgIdDep):
+    # Verify campaign exists
+    result = await session.execute(
+        select(Campaign).filter(Campaign.id == campaign_id, Campaign.organization_id == UUID(current_org_id))
+    )
+    if not result.scalars().first():
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    # Get leads with their emails
+    leads_result = await session.execute(
+        select(Lead, Email)
+        .join(CampaignLead, CampaignLead.lead_id == Lead.id)
+        .outerjoin(Email, Email.lead_id == Lead.id)
+        .filter(CampaignLead.campaign_id == campaign_id)
+    )
+    
+    rows = leads_result.all()
+    
+    # Format the response
+    response = []
+    # Deduplicate leads just in case
+    seen_leads = set()
+    for lead, email in rows:
+        if lead.id in seen_leads:
+            continue
+        seen_leads.add(lead.id)
+        lead_dict = {
+            "id": lead.id,
+            "first_name": lead.first_name,
+            "last_name": lead.last_name,
+            "email": lead.email,
+            "job_title": lead.job_title,
+            "company": lead.company,
+            "draft_email": None
+        }
+        if email:
+            lead_dict["draft_email"] = {
+                "subject": email.subject,
+                "body": email.body,
+                "status": email.status
+            }
+        response.append(lead_dict)
+        
+    return response

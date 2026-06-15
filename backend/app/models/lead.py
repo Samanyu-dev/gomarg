@@ -15,6 +15,12 @@ class Lead(BaseModel):
     company = Column(String)
     job_title = Column(String)
     
+    phone_number = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    state = Column(String, nullable=True)
+    country = Column(String, nullable=True)
+    industry = Column(String, nullable=True)
+    
     status = Column(String, default="new")
     score = Column(Integer, default=0)
     source = Column(String)
