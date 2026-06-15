@@ -126,7 +126,8 @@ async def inbound_reply_webhook(request: Request, session: SessionDep):
     # Analyze Sentiment
     try:
         generator = AIEmailGenerator(session)
-        analysis = await generator.analyze_reply(text_content[:2000]) # cap length
+        sentiment = await generator.analyze_reply_sentiment(text_content[:2000]) # cap length
+        analysis = {"sentiment": sentiment}
     except Exception as e:
         logger.error(f"NLP Analysis failed: {e}")
         analysis = {"sentiment": "neutral", "intent_summary": "Analysis failed"}
