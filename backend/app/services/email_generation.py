@@ -120,3 +120,58 @@ class AIEmailGenerator:
         )
         
         return json.loads(response.text)
+
+    async def generate_followup_email(self, lead_id: UUID, org_id: UUID, sequence_step: int, prior_emails_context: str) -> Dict[str, Any]:
+        """
+        Uses Gemini to generate a follow-up email based on prior interaction context.
+        """
+        if not self.client:
+            raise ValueError("GEMINI_API_KEY is not configured.")
+            
+        result = await self.session.execute(
+            select(Lead).filter(Lead.id == lead_id, Lead.organization_id == org_id)
+        )
+        lead = result.scalars().first()
+        if not lead:
+            raise ValueError("Lead not found")
+            
+        prompt = f"""
+        You are an expert Sales Development Representative. Write a follow-up email (Sequence Step {sequence_step}).
+        
+        Target Lead: {lead.first_name} {lead.last_name} at {lead.company}
+        Lead Current Engagement Score: {lead.lead_score.upper()}
+        
+        Context of previous emails sent to them:
+        {prior_emails_context}
+        
+        Instructions:
+        1. Keep it very short (under 50 words).
+        2. Reference the fact that you reached out previously.
+        3. Provide a new, distinct angle or piece of value.
+        4. End with a low-friction question.
+        """
+        
+        response = self.client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=EmailOutput,
+                temperature=0.7,
+            ),
+        )
+        
+        email_data = json.loads(response.text)
+        
+        ai_log = AIGeneration(
+            organization_id=org_id,
+            lead_id=lead_id,
+            task_type="followup_generation",
+            provider="gemini",
+            model="gemini-2.5-flash",
+            output=email_data
+        )
+        self.session.add(ai_log)
+        await self.session.commit()
+        
+        return email_data
