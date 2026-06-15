@@ -1,76 +1,58 @@
-from fastapi import APIRouter, Request, status, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+import logging
 from typing import Dict, Any
-
+from fastapi import APIRouter, Request, BackgroundTasks
 from app.api.deps import SessionDep
-from app.models.email import EmailEvent
+from app.models.email import Email, EmailEvent
+from sqlalchemy.future import select
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
+logger = logging.getLogger(__name__)
 
-@router.post("/brevo", status_code=status.HTTP_200_OK)
-async def brevo_webhook(request: Request, session: SessionDep):
+@router.post("/brevo")
+async def brevo_webhook(request: Request, session: SessionDep, background_tasks: BackgroundTasks):
     """
-    Receives webhook events from Brevo (opens, clicks, bounces, etc).
+    Receives webhook events from Brevo (opened, clicked, bounced, etc).
     """
     try:
         payload = await request.json()
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
-    # Example Brevo Payload Event Name: 'opened', 'click', 'delivered'
-    event_type = payload.get("event")
-    email_id = payload.get("message-id") # This requires mapping Brevo's message-id to our Email record
-    
-    if not event_type:
         return {"status": "ignored"}
-
-    # In a real app, you'd lookup the `email_id` in the database to link it back to a Lead and Campaign
-    # For now, we will log it assuming we have a mock ID or we just store the raw payload.
-    # To implement this fully, we need the `Email` table to store the `message-id` returned by Brevo.
-
-    print(f"Received Brevo Event: {event_type} for message {email_id}")
     
-    # Store the event
-    # new_event = EmailEvent(
-    #     email_id=...,
-    #     event_type=event_type,
-    #     user_agent=payload.get("user_agent"),
-    #     ip_address=payload.get("ip")
-    # )
-    # session.add(new_event)
-    # await session.commit()
+    event_type = payload.get("event")
+    message_id = payload.get("message-id") or payload.get("messageId")
+    provider_event_id = str(payload.get("id", ""))
+    
+    if not message_id or not event_type:
+        return {"status": "ignored", "reason": "Missing required fields"}
+        
+    logger.info(f"Received Brevo Webhook: {event_type} for message {message_id}")
 
+    # Find the email by provider_message_id
+    result = await session.execute(
+        select(Email).filter(Email.provider_message_id == message_id)
+    )
+    email = result.scalars().first()
+    
+    if not email:
+        logger.warning(f"Webhook received for unknown message_id: {message_id}")
+        return {"status": "not_found"}
+
+    # Update email status if applicable
+    if event_type == "bounced" or event_type == "hard_bounce":
+        email.status = "bounced"
+    elif event_type == "delivered" and email.status == "sent":
+        email.status = "delivered"
+        
+    # Create the event record
+    event = EmailEvent(
+        email_id=email.id,
+        event_type=event_type,
+        provider_event_id=provider_event_id
+    )
+    session.add(event)
+    await session.commit()
+    
+    # We will trigger the classification engine here in a later step
+    
     return {"status": "success"}
-
-from pydantic import BaseModel
-from uuid import UUID
-from app.api.deps import CurrentOrgIdDep
-from app.services.reply_analysis import AIReplyAnalyzer
-
-class ReplySimulationRequest(BaseModel):
-    lead_id: UUID
-    email_text: str
-
-@router.post("/replies/simulate", status_code=status.HTTP_200_OK)
-async def simulate_reply_analysis(
-    request: ReplySimulationRequest,
-    session: SessionDep,
-    current_org_id: CurrentOrgIdDep
-):
-    """
-    Simulates an incoming reply from a lead and runs it through the AI Analyzer.
-    """
-    analyzer = AIReplyAnalyzer(session)
-    try:
-        analysis = await analyzer.analyze_reply(
-            lead_id=request.lead_id,
-            org_id=UUID(current_org_id),
-            email_text=request.email_text
-        )
-        return analysis
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Reply analysis failed: {str(e)}")
 
