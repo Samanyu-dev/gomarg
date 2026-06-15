@@ -1,6 +1,7 @@
 from typing import List
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.future import select
+from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from app.api.deps import SessionDep, CurrentOrgIdDep
 from app.models.campaign import Campaign, CampaignStep
@@ -92,6 +93,62 @@ async def delete_campaign(campaign_id: UUID, session: SessionDep, current_org_id
         
     await session.delete(campaign)
     await session.commit()
+
+from app.models.email import EmailEvent
+
+@router.get("/{campaign_id}/stats")
+async def get_campaign_stats(campaign_id: UUID, session: SessionDep, current_org_id: CurrentOrgIdDep):
+    # Verify campaign exists
+    result = await session.execute(
+        select(Campaign).filter(Campaign.id == campaign_id, Campaign.organization_id == UUID(current_org_id))
+    )
+    if not result.scalars().first():
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    # Get all leads in campaign
+    leads_res = await session.execute(
+        select(Lead.lead_score, func.count(Lead.id))
+        .join(CampaignLead, CampaignLead.lead_id == Lead.id)
+        .filter(CampaignLead.campaign_id == campaign_id)
+        .group_by(Lead.lead_score)
+    )
+    lead_score_breakdown = {score: count for score, count in leads_res.all()}
+    
+    # Get total sent
+    sent_res = await session.execute(
+        select(func.count(Email.id))
+        .join(CampaignLead, CampaignLead.lead_id == Email.lead_id)
+        .filter(CampaignLead.campaign_id == campaign_id)
+    )
+    total_sent = sent_res.scalar() or 0
+    
+    # Get engagement counts
+    events_res = await session.execute(
+        select(EmailEvent.event_type, func.count(EmailEvent.id))
+        .join(Email, Email.id == EmailEvent.email_id)
+        .join(CampaignLead, CampaignLead.lead_id == Email.lead_id)
+        .filter(CampaignLead.campaign_id == campaign_id)
+        .group_by(EmailEvent.event_type)
+    )
+    events_breakdown = {event: count for event, count in events_res.all()}
+    
+    total_opens = events_breakdown.get("opened", 0)
+    total_clicks = events_breakdown.get("clicked", 0)
+    total_replies = events_breakdown.get("reply", 0)
+    total_bounces = events_breakdown.get("bounced", 0) + events_breakdown.get("hard_bounce", 0)
+    
+    return {
+        "total_sent": total_sent,
+        "total_opens": total_opens,
+        "total_clicks": total_clicks,
+        "total_replies": total_replies,
+        "total_bounces": total_bounces,
+        "open_rate": round(total_opens / total_sent * 100, 1) if total_sent > 0 else 0,
+        "ctr": round(total_clicks / total_sent * 100, 1) if total_sent > 0 else 0,
+        "reply_rate": round(total_replies / total_sent * 100, 1) if total_sent > 0 else 0,
+        "bounce_rate": round(total_bounces / total_sent * 100, 1) if total_sent > 0 else 0,
+        "lead_score_breakdown": lead_score_breakdown
+    }
 
 # Nested Routes for Steps
 @router.post("/{campaign_id}/steps", response_model=CampaignStepResponse, status_code=status.HTTP_201_CREATED)

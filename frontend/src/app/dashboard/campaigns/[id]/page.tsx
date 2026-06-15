@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { useParams } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { Megaphone, Users, ArrowLeft, Bot, Activity } from 'lucide-react';
+import { Megaphone, Users, ArrowLeft, Bot, Activity, Download } from 'lucide-react';
 import Link from 'next/link';
 
 interface Campaign {
@@ -29,23 +29,39 @@ interface CampaignLead {
   } | null;
 }
 
+interface CampaignStats {
+  total_sent: number;
+  total_opens: number;
+  total_clicks: number;
+  total_replies: number;
+  total_bounces: number;
+  open_rate: number;
+  ctr: number;
+  reply_rate: number;
+  bounce_rate: number;
+  lead_score_breakdown: Record<string, number>;
+}
+
 export default function CampaignDetailPage() {
   const params = useParams();
   const campaignId = params?.id as string;
   
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [leads, setLeads] = useState<CampaignLead[]>([]);
+  const [stats, setStats] = useState<CampaignStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedEmail, setSelectedEmail] = useState<{subject: string, body: string} | null>(null);
 
   const fetchData = async () => {
     try {
-      const [campRes, leadsRes] = await Promise.all([
+      const [campRes, leadsRes, statsRes] = await Promise.all([
         api.get(`/campaigns/${campaignId}`),
-        api.get(`/campaigns/${campaignId}/leads`)
+        api.get(`/campaigns/${campaignId}/leads`),
+        api.get(`/campaigns/${campaignId}/stats`)
       ]);
       setCampaign(campRes.data);
       setLeads(leadsRes.data);
+      setStats(statsRes.data);
     } catch (err) {
       toast.error('Failed to load campaign data');
     } finally {
@@ -94,6 +110,36 @@ export default function CampaignDetailPage() {
     return <div className="p-12 text-center text-destructive">Campaign not found.</div>;
   }
 
+  const downloadCSV = () => {
+    if (!leads.length) {
+      toast.error("No leads to export");
+      return;
+    }
+    
+    const headers = ['First Name', 'Last Name', 'Email', 'Company', 'Job Title', 'Score', 'Status'];
+    const csvContent = [
+      headers.join(','),
+      ...leads.map(l => [
+        `"${l.first_name}"`,
+        `"${l.last_name}"`,
+        `"${l.email}"`,
+        `"${l.company}"`,
+        `"${l.job_title}"`,
+        `"${l.lead_score || 'cold'}"`,
+        `"${l.draft_email?.status || 'pending'}"`
+      ].join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `campaign_${campaign.name.replace(/\s+/g, '_')}_leads.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const emailsGenerated = leads.filter(l => l.draft_email).length;
   const emailsSent = leads.filter(l => l.draft_email?.status === 'sent').length;
 
@@ -119,7 +165,16 @@ export default function CampaignDetailPage() {
           </p>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={downloadCSV}
+            className="px-4 py-3 rounded-xl font-medium flex items-center gap-2 transition-all bg-white/5 hover:bg-white/10 border border-white/10"
+            title="Export to CSV"
+          >
+            <Download className="w-5 h-5" />
+            <span className="hidden sm:inline">Export CSV</span>
+          </button>
+          
           <button
             onClick={toggleAgent}
             className={`px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all shadow-lg ${
@@ -143,22 +198,36 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <div className="glass rounded-2xl p-6 border border-white/5">
-          <h2 className="text-xl font-semibold mb-4">Live Agent Stats</h2>
-          <div className="space-y-4">
-            <div className="p-4 bg-black/20 rounded-xl border border-white/5 flex justify-between items-center">
-              <p className="text-sm text-muted-foreground mb-1">Total Leads Assigned</p>
-              <p className="text-2xl font-bold">{leads.length}</p>
-            </div>
-            <div className="p-4 bg-black/20 rounded-xl border border-white/5 flex justify-between items-center">
-              <p className="text-sm text-muted-foreground mb-1">Drafts Generated</p>
-              <p className="text-2xl font-bold text-purple-400">{emailsGenerated}</p>
-            </div>
-            <div className="p-4 bg-black/20 rounded-xl border border-white/5 flex justify-between items-center">
-              <p className="text-sm text-muted-foreground mb-1">Emails Sent</p>
-              <p className="text-2xl font-bold text-green-400">{emailsSent}</p>
-            </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="glass rounded-2xl p-6 border border-white/5 flex flex-col justify-between">
+          <p className="text-sm font-medium text-muted-foreground mb-2">Total Sent</p>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-3xl font-bold">{stats?.total_sent || 0}</h3>
+            <span className="text-xs text-muted-foreground">emails</span>
+          </div>
+        </div>
+        
+        <div className="glass rounded-2xl p-6 border border-white/5 flex flex-col justify-between">
+          <p className="text-sm font-medium text-muted-foreground mb-2">Open Rate</p>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-3xl font-bold text-blue-400">{stats?.open_rate || 0}%</h3>
+            <span className="text-xs text-muted-foreground">({stats?.total_opens || 0})</span>
+          </div>
+        </div>
+
+        <div className="glass rounded-2xl p-6 border border-white/5 flex flex-col justify-between">
+          <p className="text-sm font-medium text-muted-foreground mb-2">Click Rate</p>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-3xl font-bold text-purple-400">{stats?.ctr || 0}%</h3>
+            <span className="text-xs text-muted-foreground">({stats?.total_clicks || 0})</span>
+          </div>
+        </div>
+
+        <div className="glass rounded-2xl p-6 border border-white/5 flex flex-col justify-between">
+          <p className="text-sm font-medium text-muted-foreground mb-2">Reply Rate</p>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-3xl font-bold text-green-400">{stats?.reply_rate || 0}%</h3>
+            <span className="text-xs text-muted-foreground">({stats?.total_replies || 0})</span>
           </div>
         </div>
       </div>
