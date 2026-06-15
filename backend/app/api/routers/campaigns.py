@@ -169,6 +169,25 @@ async def add_campaign_step(campaign_id: UUID, step_in: CampaignStepCreate, sess
     await session.refresh(new_step)
     return new_step
 
+@router.delete("/{campaign_id}/steps/{step_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_campaign_step(campaign_id: UUID, step_id: UUID, session: SessionDep, current_org_id: CurrentOrgIdDep):
+    # Verify campaign exists & belongs to org
+    result = await session.execute(
+        select(Campaign).filter(Campaign.id == campaign_id, Campaign.organization_id == UUID(current_org_id))
+    )
+    if not result.scalars().first():
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    step_res = await session.execute(
+        select(CampaignStep).filter(CampaignStep.id == step_id, CampaignStep.campaign_id == campaign_id)
+    )
+    step = step_res.scalars().first()
+    if not step:
+        raise HTTPException(status_code=404, detail="Step not found")
+        
+    await session.delete(step)
+    await session.commit()
+
 from app.models.campaign import CampaignLead
 from app.models.lead import Lead
 from app.models.email import Email
@@ -232,6 +251,7 @@ async def get_campaign_leads(campaign_id: UUID, session: SessionDep, current_org
         }
         if email:
             lead_dict["draft_email"] = {
+                "id": str(email.id),
                 "subject": email.subject,
                 "body": email.body,
                 "status": email.status
@@ -239,3 +259,27 @@ async def get_campaign_leads(campaign_id: UUID, session: SessionDep, current_org
         response.append(lead_dict)
         
     return response
+
+@router.post("/{campaign_id}/emails/{email_id}/approve", status_code=status.HTTP_200_OK)
+async def approve_campaign_email(campaign_id: UUID, email_id: UUID, session: SessionDep, current_org_id: CurrentOrgIdDep):
+    """
+    Approves an AI generated draft email. The background worker will pick this up
+    and send it on the next tick.
+    """
+    # Verify campaign exists
+    result = await session.execute(
+        select(Campaign).filter(Campaign.id == campaign_id, Campaign.organization_id == UUID(current_org_id))
+    )
+    if not result.scalars().first():
+        raise HTTPException(status_code=404, detail="Campaign not found")
+        
+    email_res = await session.execute(
+        select(Email).filter(Email.id == email_id, Email.status == "draft")
+    )
+    email = email_res.scalars().first()
+    if not email:
+        raise HTTPException(status_code=404, detail="Draft email not found")
+        
+    email.status = "approved"
+    await session.commit()
+    return {"message": "Email approved. Agent will send it shortly."}

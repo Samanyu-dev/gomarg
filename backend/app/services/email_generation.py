@@ -12,7 +12,9 @@ The key upgrade over the original:
 
 import json
 import logging
+import asyncio
 from uuid import UUID
+from typing import Optional
 
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -316,7 +318,10 @@ Return JSON with keys: "sentiment", "intent", "reasoning" (one sentence).
         Calls Gemini with structured JSON output. Handles the response parsing.
         Raises on failure so the caller can decide how to handle it.
         """
-        response = self.client.models.generate_content(
+        # Sleep for 4 seconds to avoid hitting the 15 RPM free tier rate limit
+        await asyncio.sleep(4)
+        
+        response = await self.client.aio.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -331,7 +336,7 @@ Return JSON with keys: "sentiment", "intent", "reasoning" (one sentence).
         self,
         lead: Lead,
         campaign: Campaign,
-        step: CampaignStep | None,
+        step: Optional[CampaignStep],
         subject: str,
         body: str,
         task_type: str,

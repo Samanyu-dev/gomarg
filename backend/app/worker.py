@@ -13,6 +13,7 @@ This is NOT a simple poller. It is a decision-making agent that:
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +26,7 @@ from app.models.email import Email, EmailEvent
 from app.models.lead import Lead
 from app.services.email_generation import AIEmailGenerator
 from app.services.email_sender import EmailSenderService
+from app.services.sourcing import ApolloService
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,7 @@ async def agent_tick(session: AsyncSession):
       3. For each campaign, advance every enrolled lead through its step playbook
     """
     await rescore_all_leads(session)
+    await sourcing_tick(session)
     await advance_all_campaigns(session)
 
 
@@ -126,6 +129,96 @@ async def rescore_all_leads(session: AsyncSession):
 
     await session.commit()
 
+
+# ─────────────────────────────────────────────
+# SOURCING AGENT (PHASE 3)
+# ─────────────────────────────────────────────
+async def sourcing_tick(session: AsyncSession):
+    """
+    Looks for active campaigns with ICP filters defined.
+    If today's fetched limit hasn't been reached, fetch new leads from Apollo
+    and automatically assign them to the campaign.
+    """
+    result = await session.execute(
+        select(Campaign).filter(Campaign.status == "active")
+    )
+    campaigns = result.scalars().all()
+
+    for campaign in campaigns:
+        settings = campaign.settings or {}
+        icp = settings.get("icp", None)
+        if not icp:
+            continue
+            
+        limit = icp.get("limit_per_day", 5)
+        # Check how many leads enrolled today for this campaign
+        today = datetime.now(timezone.utc).date()
+        
+        # Count campaign leads enrolled today
+        # Simplified: we just check total leads in campaign vs limit (or keep it simple and just run Apollo search)
+        # Actually, let's just fetch up to the limit from Apollo right now
+        # In a real production system, you'd track daily sourcing state in the DB.
+        # For MVP, we'll just attempt a small query and add missing ones.
+        
+        # Only run sourcing once every 6 hours or similar? 
+        # For demo purposes, we will just run it if the campaign has less leads than limit.
+        cl_res = await session.execute(
+            select(CampaignLead).filter(CampaignLead.campaign_id == campaign.id)
+        )
+        current_enrolled = len(cl_res.scalars().all())
+        
+        if current_enrolled >= limit:
+            continue # We reached our desired ICP limit for this campaign (demo simplified)
+            
+        logger.info(f"🔎 Autopilot Sourcing running for campaign '{campaign.name}' (ICP: {icp})")
+        
+        params = {
+            "page": 1,
+            "per_page": limit,
+        }
+        if "keywords" in icp and icp["keywords"]:
+            params["q_keywords"] = icp["keywords"].strip()
+        if "company" in icp and icp["company"]:
+            params["q_organization_name"] = icp["company"].strip()
+        if "seniorities" in icp and icp["seniorities"]:
+            if isinstance(icp["seniorities"], list):
+                params["person_seniorities"] = icp["seniorities"]
+            else:
+                params["person_seniorities"] = [s.strip() for s in icp["seniorities"].split(",")]
+        
+        # Keep backwards compatibility just in case
+        if "person_titles" in icp and icp["person_titles"]:
+            params["person_titles"] = [t.strip() for t in icp["person_titles"].split(",")]
+        if "person_locations" in icp and icp["person_locations"]:
+            params["person_locations"] = [l.strip() for l in icp["person_locations"].split(",")]
+
+        service = ApolloService(session)
+        try:
+            # We must get the org_id to save the leads correctly
+            org_id = campaign.organization_id
+            imported_count = await service.search_and_import_leads(params=params, org_id=org_id)
+            
+            if imported_count > 0:
+                logger.info(f"✅ Sourcing Agent found {imported_count} new leads for campaign {campaign.id}")
+                # Enrol the newly created leads into the campaign
+                # The service created them recently. Let's find leads that aren't in this campaign yet
+                all_org_leads_res = await session.execute(
+                    select(Lead).filter(Lead.organization_id == org_id).order_by(Lead.created_at.desc()).limit(imported_count)
+                )
+                recent_leads = all_org_leads_res.scalars().all()
+                
+                for lead in recent_leads:
+                    # check if already in campaign
+                    cl_check = await session.execute(
+                        select(CampaignLead).filter(CampaignLead.campaign_id == campaign.id, CampaignLead.lead_id == lead.id)
+                    )
+                    if not cl_check.scalars().first():
+                        cl = CampaignLead(campaign_id=campaign.id, lead_id=lead.id)
+                        session.add(cl)
+                        
+                await session.commit()
+        except Exception as e:
+            logger.error(f"Sourcing agent failed for campaign {campaign.id}: {e}")
 
 # ─────────────────────────────────────────────
 # STEP 2: ADVANCE ALL CAMPAIGNS
@@ -252,7 +345,7 @@ async def handle_email_step(
         select(Email).filter(
             Email.lead_id == lead.id,
             Email.campaign_step_id == step.id,
-            Email.status == "draft",
+            Email.status.in_(["draft", "approved"]),
         )
     )
     email = draft_check.scalars().first()
@@ -271,21 +364,29 @@ async def handle_email_step(
             logger.error(f"Generation failed for lead {lead.id}: {e}")
             return
 
-    # Send the drafted email
-    logger.info(f"📤 Sending step-{step.order_index} email to {lead.email}")
-    sender = EmailSenderService(session)
-    success = await sender.send_email(email.id)
+    if email.status == "draft":
+        # ── HUMAN-IN-THE-LOOP (Phase 3) ──
+        # The agent generates the draft, but does NOT send it.
+        # It waits for the moderator to approve via the frontend UI.
+        logger.info(f"✋ Draft step-{step.order_index} for {lead.email} is waiting for Moderator Approval.")
+        return
 
-    if success:
-        cl.status = "active"
-        lead.sequence_step = step.order_index
-        # Set next_contact_at for the wait step that follows (agent checks this)
-        next_step = _get_next_step(playbook, step)
-        if next_step and next_step.step_type == "wait":
-            wait_hours = next_step.config.get("wait_hours", 72)
-            lead.next_contact_at = datetime.now(timezone.utc) + timedelta(hours=wait_hours)
-        await _advance_to_next_step(session, playbook, cl, step)
-        await session.commit()
+    if email.status == "approved":
+        # Send the drafted email
+        logger.info(f"📤 Sending APPROVED step-{step.order_index} email to {lead.email}")
+        sender = EmailSenderService(session)
+        success = await sender.send_email(email.id)
+
+        if success:
+            cl.status = "active"
+            lead.sequence_step = step.order_index
+            # Set next_contact_at for the wait step that follows (agent checks this)
+            next_step = _get_next_step(playbook, step)
+            if next_step and next_step.step_type == "wait":
+                wait_hours = next_step.config.get("wait_hours", 72)
+                lead.next_contact_at = datetime.now(timezone.utc) + timedelta(hours=wait_hours)
+            await _advance_to_next_step(session, playbook, cl, step)
+            await session.commit()
 
 
 # ─────────────────────────────────────────────
@@ -473,8 +574,8 @@ async def escalate_hot_lead(
 # UTILITY FUNCTIONS
 # ─────────────────────────────────────────────
 def _get_current_step(
-    playbook: list[CampaignStep], step_id: UUID | None
-) -> CampaignStep | None:
+    playbook: list[CampaignStep], step_id: Optional[UUID]
+) -> Optional[CampaignStep]:
     if step_id is None:
         return None
     return next((s for s in playbook if s.id == step_id), None)
@@ -482,7 +583,7 @@ def _get_current_step(
 
 def _get_next_step(
     playbook: list[CampaignStep], current: CampaignStep
-) -> CampaignStep | None:
+) -> Optional[CampaignStep]:
     sorted_steps = sorted(playbook, key=lambda s: s.order_index)
     for i, s in enumerate(sorted_steps):
         if s.id == current.id and i + 1 < len(sorted_steps):

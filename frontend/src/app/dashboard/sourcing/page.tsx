@@ -42,9 +42,17 @@ export default function SourcingPage() {
   const [locationFilter, setLocationFilter] = useState('');
 
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [filterParams, setFilterParams] = useState({
     q_keywords: '',
     per_page: '10'
+  });
+  const [manualLead, setManualLead] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    company: '',
+    job_title: ''
   });
 
   const fetchData = async () => {
@@ -104,6 +112,23 @@ export default function SourcingPage() {
     }
   };
 
+  const handleCreateManualLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsManualModalOpen(false);
+    const toastId = toast.loading('Creating lead...');
+    try {
+      await api.post('/leads', {
+        ...manualLead,
+        status: 'new'
+      });
+      toast.success('Lead created successfully!', { id: toastId });
+      setManualLead({ first_name: '', last_name: '', email: '', company: '', job_title: '' });
+      await fetchData();
+    } catch (err: any) {
+      toast.error('Failed to create lead', { id: toastId });
+    }
+  };
+
   const filteredLeads = leads.filter(lead => {
     const matchesSearch = !searchQuery || 
       `${lead.first_name} ${lead.last_name} ${lead.email} ${lead.company}`.toLowerCase().includes(searchQuery.toLowerCase());
@@ -154,14 +179,22 @@ export default function SourcingPage() {
           <p className="text-muted-foreground">Search and import your saved contacts from Apollo.</p>
         </div>
         
-        <button
-          onClick={() => setIsFilterModalOpen(true)}
-          disabled={syncing}
-          className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
-        >
-          <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
-          {syncing ? 'Fetching...' : 'Get More Leads'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsManualModalOpen(true)}
+            className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-medium transition-all border border-white/10"
+          >
+            Add Lead Manually
+          </button>
+          <button
+            onClick={() => setIsFilterModalOpen(true)}
+            disabled={syncing}
+            className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Fetching...' : 'Get Apollo Leads'}
+          </button>
+        </div>
       </div>
 
       <div className="glass rounded-2xl overflow-hidden border border-white/5">
@@ -392,6 +425,85 @@ export default function SourcingPage() {
                   className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-all"
                 >
                   Import Leads
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Lead Modal */}
+      {isManualModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="glass w-full max-w-md p-6 rounded-2xl border border-white/10 animate-in">
+            <h2 className="text-2xl font-bold mb-4">Add Test Lead</h2>
+            <p className="text-sm text-muted-foreground mb-6">Create a manual lead (e.g. your own email) to test campaign automations.</p>
+            <form onSubmit={handleCreateManualLead}>
+              <div className="space-y-4 mb-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">First Name</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500/50"
+                      value={manualLead.first_name}
+                      onChange={(e) => setManualLead({...manualLead, first_name: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Last Name</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500/50"
+                      value={manualLead.last_name}
+                      onChange={(e) => setManualLead({...manualLead, last_name: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Email Address</label>
+                  <input 
+                    required
+                    type="email" 
+                    className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500/50"
+                    value={manualLead.email}
+                    onChange={(e) => setManualLead({...manualLead, email: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Company</label>
+                  <input 
+                    type="text" 
+                    className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500/50"
+                    value={manualLead.company}
+                    onChange={(e) => setManualLead({...manualLead, company: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Job Title</label>
+                  <input 
+                    type="text" 
+                    className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500/50"
+                    value={manualLead.job_title}
+                    onChange={(e) => setManualLead({...manualLead, job_title: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => setIsManualModalOpen(false)}
+                  className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-all"
+                >
+                  Create Lead
                 </button>
               </div>
             </form>
