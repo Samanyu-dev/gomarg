@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 
 # Import routers
-from app.api.routers import organizations, users, leads, lead_lists, campaigns, research, auth, webhooks, generation
+from app.api.routers import organizations, users, leads, lead_lists, campaigns, research, auth, webhooks, generation, sourcing
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -29,6 +29,7 @@ app.include_router(campaigns.router, prefix="/api/v1")
 app.include_router(research.router, prefix="/api/v1")
 app.include_router(webhooks.router, prefix="/api/v1")
 app.include_router(generation.router, prefix="/api/v1")
+app.include_router(sourcing.router, prefix="/api/v1")
 
 @app.get("/health")
 async def health_check():

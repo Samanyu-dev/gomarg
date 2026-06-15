@@ -74,3 +74,75 @@ class ApolloService:
         )
         self.session.add(doc)
         await self.session.commit()
+
+    async def search_and_import_leads(self, params: Dict[str, Any], org_id: UUID) -> int:
+        """
+        Pulls saved Contacts from the user's Apollo account.
+        Since these are saved contacts, they already have emails revealed.
+        """
+        if not self.api_key:
+            print("WARNING: Apollo API key not configured. Cannot search.")
+            return 0
+            
+        search_url = "https://api.apollo.io/v1/contacts/search"
+        payload = params # remove api_key from payload
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+            "X-Api-Key": self.api_key
+        }
+        
+        async with httpx.AsyncClient() as client:
+            print(f"Fetching saved Apollo Contacts with params: {params}")
+            response = await client.post(search_url, headers=headers, json=payload, timeout=30.0)
+            
+            if response.status_code != 200:
+                print(f"Apollo API Contacts Search error: {response.text}")
+                return 0
+                
+            data = response.json()
+            contacts = data.get("contacts", [])
+            print(f"Found {len(contacts)} saved contacts. Importing...")
+            
+            imported_count = 0
+            
+            for contact in contacts:
+                email = contact.get("email")
+                if not email:
+                    continue # Skip if the saved contact doesn't have an email
+                    
+                first_name = contact.get("first_name", "")
+                last_name = contact.get("last_name", "")
+                title = contact.get("title", "")
+                company = contact.get("organization_name", "")
+                linkedin = contact.get("linkedin_url", "")
+                
+                # Prevent duplicates
+                existing_lead = await self.session.execute(
+                    select(Lead).filter(Lead.email == email, Lead.organization_id == org_id)
+                )
+                if existing_lead.scalars().first():
+                    continue
+                    
+                # Create Lead
+                new_lead = Lead(
+                    organization_id=org_id,
+                    email=email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    company=company,
+                    job_title=title,
+                    linkedin_url=linkedin,
+                    status="new"
+                )
+                self.session.add(new_lead)
+                await self.session.commit()
+                await self.session.refresh(new_lead)
+                
+                # Save the raw contact data as research for the AI
+                await self._save_research(new_lead, org_id, contact)
+                imported_count += 1
+                print(f"Imported lead: {email}")
+                
+            return imported_count
