@@ -1,16 +1,16 @@
-# GoMarg: AI-Powered Sales Automation Platform 🚀
+# GoMarg: AI Sales Automation Platform 🚀
 
-Welcome to **GoMarg**, a next-generation B2B sales automation platform. GoMarg bridges the gap between massive data sourcing and hyper-personalized outreach. By integrating seamlessly with Apollo for lead data and leveraging advanced LLMs (Large Language Models) for email drafting, GoMarg acts as a fully autonomous AI sales agent.
+Welcome to **GoMarg**, a next generation B2B sales automation platform. GoMarg bridges the gap between massive data sourcing and hyper personalized outreach. By integrating seamlessly with Apollo for lead data and leveraging advanced LLMs (Large Language Models) for email drafting, GoMarg acts as a fully autonomous AI sales agent.
 
 ---
 
-## 🏗 High-Level System Architecture
+## 🏗 System Architecture
 
-GoMarg employs a decoupled, highly scalable architecture. The frontend is built on Next.js 16 (App Router) for a lightning-fast, SEO-friendly user experience, while the backend is powered by FastAPI (Python) for asynchronous, high-performance data processing and AI integration.
+GoMarg employs a decoupled, highly scalable architecture. The frontend is built on Next.js 16 (App Router) for a lightning fast, SEO friendly user experience, while the backend is powered by FastAPI (Python) for asynchronous, high performance data processing and AI integration.
 
 ```mermaid
 graph TD
-    subgraph Frontend [Client-Side UI]
+    subgraph Frontend [Client Side UI]
         Next[Next.js 16 App]
         Context[React AuthContext]
         Tailwind[Tailwind CSS v4]
@@ -46,19 +46,19 @@ graph TD
 
 ## 🎨 Interactive Elements & User Interface
 
-The GoMarg dashboard is designed with a premium, hyper-modern aesthetic focusing on user engagement and seamless workflow.
+The GoMarg dashboard is designed with a premium, hyper modern aesthetic focusing on user engagement and seamless workflow.
 
-- **Glassmorphism Design:** Elements utilize translucent, frosted-glass backgrounds (`backdrop-blur`) over subtle, dynamic animated gradients to create depth.
-- **Dynamic Data Tables:** The Sourcing Page features a real-time table populated by the backend. Empty states provide clear calls-to-action, while populated states offer instant search capabilities.
-- **Micro-Animations:** Form submissions, button clicks, and page transitions use `framer-motion` and Tailwind transitions to feel responsive and alive.
-- **Real-Time Feedback:** Using `react-hot-toast`, every action (saving a lead, authenticating, triggering the AI) provides instant, styled popup notifications to the user.
+- **Glassmorphism Design:** Elements utilize translucent, frosted glass backgrounds (`backdrop-blur`) over subtle, dynamic animated gradients to create depth.
+- **Dynamic Data Tables:** The Sourcing Page features a real time table populated by the backend. Empty states provide clear calls to action, while populated states offer instant search capabilities.
+- **Micro Animations:** Form submissions, button clicks, and page transitions use `framer-motion` and Tailwind transitions to feel responsive and alive.
+- **Real Time Feedback:** Using `reacthot-toast`, every action (saving a lead, authenticating, triggering the AI) provides instant, styled popup notifications to the user.
 - **The "Sync Apollo Contacts" Trigger:** A visually distinct button that acts as the bridge between the UI and the asynchronous backend sourcing pipeline.
 
 ---
 
 ## 🔐 Authentication Flow & Tenant Isolation
 
-Security and data privacy are paramount. GoMarg utilizes a strict Organization-based multi-tenant architecture. Every user belongs to an Organization, and all data queries are scoped to that Organization.
+Security and data privacy are paramount. GoMarg utilizes a strict Organization based multi tenant architecture. Every user belongs to an Organization, and all data queries are scoped to that Organization.
 
 ```mermaid
 sequenceDiagram
@@ -111,7 +111,7 @@ flowchart LR
 
 ## 🧠 AI Agent Architecture (The Brain)
 
-The core value of GoMarg is the AI Agent that reads the sourced data and writes hyper-personalized emails. This is not a "mail merge template." It is a dynamic prompt-engineering pipeline.
+The core value of GoMarg is the AI Agent that reads the sourced data and writes personalized emails. This is not a "mail merge template." It is a dynamic prompt-engineering pipeline.
 
 ```mermaid
 sequenceDiagram
