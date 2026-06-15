@@ -17,6 +17,10 @@ class EmailOutput(BaseModel):
     intro_sentence: str
     full_body: str
 
+class ReplyAnalysisOutput(BaseModel):
+    sentiment: str # positive, neutral, negative
+    intent_summary: str
+
 class AIEmailGenerator:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -88,3 +92,31 @@ class AIEmailGenerator:
         await self.session.commit()
 
         return email_data
+
+    async def analyze_reply(self, reply_body: str) -> Dict[str, Any]:
+        """
+        Uses Gemini to classify an inbound reply's sentiment and intent.
+        """
+        if not self.client:
+            raise ValueError("GEMINI_API_KEY is not configured.")
+            
+        prompt = f"""
+        Analyze the following inbound email reply from a sales prospect.
+        Classify the sentiment as strictly one of: positive, neutral, negative.
+        Provide a very brief 1-sentence summary of their intent.
+        
+        Email Reply:
+        \"\"\"{reply_body}\"\"\"
+        """
+        
+        response = self.client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=ReplyAnalysisOutput,
+                temperature=0.1,
+            ),
+        )
+        
+        return json.loads(response.text)

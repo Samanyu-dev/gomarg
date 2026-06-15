@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request, BackgroundTasks
 from app.api.deps import SessionDep
 from app.models.email import Email, EmailEvent
 from app.models.lead import Lead
+from app.services.email_generation import AIEmailGenerator
 from sqlalchemy.future import select
 from sqlalchemy import func
 
@@ -89,4 +90,65 @@ async def brevo_webhook(request: Request, session: SessionDep, background_tasks:
             await session.commit()
             
     return {"status": "success"}
+
+@router.post("/inbound")
+async def inbound_reply_webhook(request: Request, session: SessionDep):
+    """
+    Receives inbound parsed replies from Brevo.
+    Extracts the body, calls Gemini for NLP sentiment, and stores the event.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        return {"status": "ignored"}
+        
+    items = payload.get("items", [])
+    if not items:
+        return {"status": "ignored"}
+        
+    item = items[0]
+    message_id = item.get("In-Reply-To", "").strip('<>')
+    if not message_id:
+        return {"status": "no_in_reply_to"}
+        
+    text_content = item.get("RawHtmlBody") or item.get("RawTextBody") or ""
+    
+    # Find the original email
+    result = await session.execute(
+        select(Email).filter(Email.provider_message_id == message_id)
+    )
+    email = result.scalars().first()
+    
+    if not email:
+        logger.warning(f"Inbound reply received for unknown message_id: {message_id}")
+        return {"status": "not_found"}
+        
+    # Analyze Sentiment
+    try:
+        generator = AIEmailGenerator(session)
+        analysis = await generator.analyze_reply(text_content[:2000]) # cap length
+    except Exception as e:
+        logger.error(f"NLP Analysis failed: {e}")
+        analysis = {"sentiment": "neutral", "intent_summary": "Analysis failed"}
+        
+    event = EmailEvent(
+        email_id=email.id,
+        event_type="reply",
+        provider_event_id=item.get("MessageId", ""),
+        metadata_payload=analysis
+    )
+    session.add(event)
+    
+    # Mark email as replied and lead score as hot if positive
+    email.status = "replied"
+    
+    lead_result = await session.execute(select(Lead).filter(Lead.id == email.lead_id))
+    lead = lead_result.scalars().first()
+    if lead and analysis.get("sentiment") == "positive":
+        lead.lead_score = "hot"
+        logger.info(f"🔥 POSITIVE REPLY ALERT: {lead.email} replied positively. Score set to HOT.")
+        
+    await session.commit()
+    return {"status": "success", "sentiment": analysis.get("sentiment")}
+
 
