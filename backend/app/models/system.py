@@ -10,7 +10,7 @@ class Webhook(BaseModel):
     url = Column(String, nullable=False)
     events = Column(JSON, nullable=False) # list of event names e.g. ["lead.created", "email.replied"]
     secret = Column(String, nullable=False)
-    is_active = Column(Column(Integer, default=1))
+    is_active = Column(Integer, default=1)
 
 class WebhookDelivery(BaseModel):
     __tablename__ = "webhook_deliveries"

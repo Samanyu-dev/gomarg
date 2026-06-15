@@ -28,8 +28,20 @@ async def login_access_token(
     elif not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
         
+    membership = await session.execute(select(Membership).filter(Membership.user_id == user.id))
+    mem = membership.scalars().first()
+    org_id = str(mem.organization_id) if mem else None
+        
     access_token = create_access_token(subject=user.id)
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "organization_id": org_id
+        }
+    }
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def signup(

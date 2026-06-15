@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Optional
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,10 +46,11 @@ CurrentUserDep = Annotated[User, Depends(get_current_user)]
 async def get_current_organization_id(
     session: SessionDep,
     current_user: CurrentUserDep,
-    x_organization_id: Annotated[str | None, Header()] = None
+    x_organization_id: Annotated[Optional[str], Header()] = None
 ) -> str:
     """
-    Validates that the user is a member of the requested organization.
+    Dependency to get and validate the organization ID from headers.
+    Ensures the current user actually belongs to this organization.
     """
     if not x_organization_id:
         raise HTTPException(
