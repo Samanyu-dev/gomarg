@@ -88,9 +88,15 @@ class EmailSenderService:
                 
         except httpx.HTTPStatusError as e:
             logger.error(f"Brevo API error: {e.response.text}")
-            email_record.status = 'failed'
+            email_record.retry_count = (email_record.retry_count or 0) + 1
+            if email_record.retry_count >= 3:
+                email_record.status = 'failed'
             await self.session.commit()
             return False
         except Exception as e:
             logger.error(f"Failed to send email {email_id}: {e}")
+            email_record.retry_count = (email_record.retry_count or 0) + 1
+            if email_record.retry_count >= 3:
+                email_record.status = 'failed'
+            await self.session.commit()
             return False

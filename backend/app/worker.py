@@ -172,51 +172,65 @@ async def sourcing_tick(session: AsyncSession):
             
         logger.info(f"🔎 Autopilot Sourcing running for campaign '{campaign.name}' (ICP: {icp})")
         
-        params = {
-            "page": 1,
-            "per_page": limit,
-        }
+        base_params = {}
         if "keywords" in icp and icp["keywords"]:
-            params["q_keywords"] = icp["keywords"].strip()
+            base_params["q_keywords"] = icp["keywords"].strip()
         if "company" in icp and icp["company"]:
-            params["q_organization_name"] = icp["company"].strip()
-        if "seniorities" in icp and icp["seniorities"]:
-            if isinstance(icp["seniorities"], list):
-                params["person_seniorities"] = icp["seniorities"]
-            else:
-                params["person_seniorities"] = [s.strip() for s in icp["seniorities"].split(",")]
-        
+            base_params["q_organization_name"] = icp["company"].strip()
+            
         # Keep backwards compatibility just in case
         if "person_titles" in icp and icp["person_titles"]:
-            params["person_titles"] = [t.strip() for t in icp["person_titles"].split(",")]
+            base_params["person_titles"] = [t.strip() for t in icp["person_titles"].split(",")]
         if "person_locations" in icp and icp["person_locations"]:
-            params["person_locations"] = [l.strip() for l in icp["person_locations"].split(",")]
+            base_params["person_locations"] = [l.strip() for l in icp["person_locations"].split(",")]
+
+        seniorities_to_try = []
+        if "seniorities" in icp and icp["seniorities"]:
+            if isinstance(icp["seniorities"], list):
+                seniorities_to_try = icp["seniorities"]
+            else:
+                seniorities_to_try = [s.strip() for s in icp["seniorities"].split(",")]
+                
+        # Always add a final fallback with NO seniority restriction
+        seniorities_to_try.append(None)
 
         service = ApolloService(session)
+        org_id = campaign.organization_id
+        
+        remaining_limit = limit - current_enrolled
+        total_imported = 0
+
         try:
-            # We must get the org_id to save the leads correctly
-            org_id = campaign.organization_id
-            imported_count = await service.search_and_import_leads(params=params, org_id=org_id)
-            
-            if imported_count > 0:
-                logger.info(f"✅ Sourcing Agent found {imported_count} new leads for campaign {campaign.id}")
-                # Enrol the newly created leads into the campaign
-                # The service created them recently. Let's find leads that aren't in this campaign yet
-                all_org_leads_res = await session.execute(
-                    select(Lead).filter(Lead.organization_id == org_id).order_by(Lead.created_at.desc()).limit(imported_count)
-                )
-                recent_leads = all_org_leads_res.scalars().all()
+            for seniority in seniorities_to_try:
+                if remaining_limit <= 0:
+                    break
+                    
+                params = base_params.copy()
+                params["page"] = 1
+                params["per_page"] = remaining_limit
                 
-                for lead in recent_leads:
-                    # check if already in campaign
-                    cl_check = await session.execute(
-                        select(CampaignLead).filter(CampaignLead.campaign_id == campaign.id, CampaignLead.lead_id == lead.id)
-                    )
-                    if not cl_check.scalars().first():
-                        cl = CampaignLead(campaign_id=campaign.id, lead_id=lead.id)
-                        session.add(cl)
-                        
-                await session.commit()
+                if seniority is not None:
+                    params["person_seniorities"] = [seniority]
+                    
+                imported_leads = await service.search_and_import_leads(params=params, org_id=org_id)
+                
+                if imported_leads:
+                    logger.info(f"✅ Sourcing Agent found {len(imported_leads)} new leads for campaign {campaign.id} (Seniority: {seniority or 'ALL'})")
+                    
+                    for lead in imported_leads:
+                        # check if already in campaign
+                        cl_check = await session.execute(
+                            select(CampaignLead).filter(CampaignLead.campaign_id == campaign.id, CampaignLead.lead_id == lead.id)
+                        )
+                        if not cl_check.scalars().first():
+                            cl = CampaignLead(campaign_id=campaign.id, lead_id=lead.id)
+                            session.add(cl)
+                            
+                    await session.commit()
+                    
+                    total_imported += len(imported_leads)
+                    remaining_limit -= len(imported_leads)
+                    
         except Exception as e:
             logger.error(f"Sourcing agent failed for campaign {campaign.id}: {e}")
 

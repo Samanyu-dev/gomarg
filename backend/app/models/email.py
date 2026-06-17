@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, ForeignKey, DateTime, JSON
+from sqlalchemy import Column, String, ForeignKey, DateTime, JSON, Integer
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from .base import BaseModel
@@ -15,6 +15,7 @@ class Email(BaseModel):
     status = Column(String, default="draft") # draft, scheduled, sent, failed
     sent_at = Column(DateTime(timezone=True), nullable=True)
     provider_message_id = Column(String, nullable=True)
+    retry_count = Column(Integer, default=0)
 
     events = relationship("EmailEvent", back_populates="email", cascade="all, delete-orphan")
 

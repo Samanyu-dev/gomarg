@@ -75,16 +75,16 @@ class ApolloService:
         self.session.add(doc)
         await self.session.commit()
 
-    async def search_and_import_leads(self, params: Dict[str, Any], org_id: UUID) -> int:
+    async def search_and_import_leads(self, params: Dict[str, Any], org_id: UUID) -> list[Lead]:
         """
         Pulls saved Contacts from the user's Apollo account.
         Since these are saved contacts, they already have emails revealed.
         """
         if not self.api_key:
             print("WARNING: Apollo API key not configured. Cannot search.")
-            return 0
+            return []
             
-        search_url = "https://api.apollo.io/v1/contacts/search"
+        search_url = "https://api.apollo.io/v1/mixed_people/search"
         payload = params # remove api_key from payload
         
         headers = {
@@ -99,13 +99,13 @@ class ApolloService:
             
             if response.status_code != 200:
                 print(f"Apollo API Contacts Search error: {response.text}")
-                return 0
+                return []
                 
             data = response.json()
             contacts = data.get("contacts", [])
             print(f"Found {len(contacts)} saved contacts. Importing...")
             
-            imported_count = 0
+            imported_leads = []
             
             for contact in contacts:
                 email = contact.get("email")
@@ -117,6 +117,8 @@ class ApolloService:
                 title = contact.get("title", "")
                 company = contact.get("organization_name", "")
                 linkedin = contact.get("linkedin_url", "")
+                
+                apollo_id = contact.get("id")
                 
                 # Extract extra data
                 phone_number = contact.get("sanitized_phone")
@@ -132,9 +134,16 @@ class ApolloService:
                 org = contact.get("organization", {})
                 industry = org.get("industry") if org else contact.get("industry", "")
                 
-                # Prevent duplicates
+                # Prevent duplicates (Check by apollo_id or email)
+                from sqlalchemy import or_
                 existing_lead = await self.session.execute(
-                    select(Lead).filter(Lead.email == email, Lead.organization_id == org_id)
+                    select(Lead).filter(
+                        Lead.organization_id == org_id,
+                        or_(
+                            Lead.apollo_id == apollo_id,
+                            Lead.email == email
+                        )
+                    )
                 )
                 if existing_lead.scalars().first():
                     continue
@@ -143,6 +152,7 @@ class ApolloService:
                 new_lead = Lead(
                     organization_id=org_id,
                     email=email,
+                    apollo_id=apollo_id,
                     first_name=first_name,
                     last_name=last_name,
                     company=company,
@@ -161,7 +171,7 @@ class ApolloService:
                 
                 # Save the raw contact data as research for the AI
                 await self._save_research(new_lead, org_id, contact)
-                imported_count += 1
+                imported_leads.append(new_lead)
                 print(f"Imported lead: {email}")
                 
-            return imported_count
+            return imported_leads

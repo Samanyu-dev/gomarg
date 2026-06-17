@@ -14,6 +14,7 @@ class Lead(BaseModel):
     linkedin_url = Column(String)
     company = Column(String)
     job_title = Column(String)
+    apollo_id = Column(String, index=True, nullable=True)
     
     phone_number = Column(String, nullable=True)
     city = Column(String, nullable=True)

@@ -21,7 +21,8 @@ async def brevo_webhook(request: Request, session: SessionDep, background_tasks:
     except Exception:
         return {"status": "ignored"}
     
-    event_type = payload.get("event")
+    raw_event_type = payload.get("event")
+    event_type = "open" if raw_event_type == "opened" else "click" if raw_event_type == "clicked" else raw_event_type
     message_id = payload.get("message-id") or payload.get("messageId")
     provider_event_id = str(payload.get("id", ""))
     

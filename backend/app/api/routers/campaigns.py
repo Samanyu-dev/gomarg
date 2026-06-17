@@ -4,7 +4,9 @@ from sqlalchemy.future import select
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from app.api.deps import SessionDep, CurrentOrgIdDep
-from app.models.campaign import Campaign, CampaignStep
+from app.models.campaign import Campaign, CampaignStep, CampaignLead
+from app.models.lead import Lead
+from app.models.email import Email, EmailEvent
 from app.schemas.campaign import (
     CampaignCreate, CampaignUpdate, CampaignResponse,
     CampaignStepCreate, CampaignStepUpdate, CampaignStepResponse
@@ -94,7 +96,7 @@ async def delete_campaign(campaign_id: UUID, session: SessionDep, current_org_id
     await session.delete(campaign)
     await session.commit()
 
-from app.models.email import EmailEvent
+
 
 @router.get("/{campaign_id}/stats")
 async def get_campaign_stats(campaign_id: UUID, session: SessionDep, current_org_id: CurrentOrgIdDep):
@@ -188,9 +190,7 @@ async def delete_campaign_step(campaign_id: UUID, step_id: UUID, session: Sessio
     await session.delete(step)
     await session.commit()
 
-from app.models.campaign import CampaignLead
-from app.models.lead import Lead
-from app.models.email import Email
+
 from app.schemas.campaign import CampaignLeadCreate
 
 @router.post("/{campaign_id}/leads", status_code=status.HTTP_200_OK)
