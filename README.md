@@ -205,10 +205,3 @@ GEMINI_API_KEY=your_llm_api_key
 
 
 
-//todo
-now : keyword + company name -> director -> cxo-> all( go from seniority)
-now : keywords for brightdata, data related jobs
-later : utm-headers endpoint analytics
-target : 1k/week ( showcase 1000 leads by this week) 
-         3rd week of next month : 500-600 leads per day
-         by end of this month : send mail to (new) 1000 leads + follow ups (atleast 200) 
