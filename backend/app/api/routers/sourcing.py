@@ -21,7 +21,8 @@ async def search_and_import_apollo_leads(
     params = request.model_dump(exclude_none=True)
     
     try:
-        imported_count = await service.search_and_import_leads(params=params, org_id=UUID(current_org_id))
+        imported_leads = await service.search_and_import_leads(params=params, org_id=UUID(current_org_id))
+        imported_count = len(imported_leads)
         return ApolloSearchResponse(
             success=True,
             message=f"Successfully sourced and imported {imported_count} new leads.",
