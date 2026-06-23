@@ -84,14 +84,17 @@ class ApolloService:
             print("WARNING: Apollo API key not configured. Cannot search.")
             return []
             
-        search_url = "https://api.apollo.io/v1/mixed_people/search"
+        search_url = "https://api.apollo.io/v1/contacts/search"
         payload = params # remove api_key from payload
         
         headers = {
             "Content-Type": "application/json",
             "Cache-Control": "no-cache",
-            "X-Api-Key": self.api_key
         }
+        
+        # Some Apollo endpoints require the api_key in the payload rather than headers
+        payload = params.copy()
+        payload["api_key"] = self.api_key
         
         async with httpx.AsyncClient() as client:
             print(f"Fetching saved Apollo Contacts with params: {params}")
