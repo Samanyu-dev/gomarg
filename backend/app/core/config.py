@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -20,7 +21,7 @@ class Settings(BaseSettings):
     
     APOLLO_API_KEY: str = ""
 
-    DATABASE_URL: str | None = None
+    DATABASE_URL: Optional[str] = None
 
     @property
     def get_database_url(self) -> str:

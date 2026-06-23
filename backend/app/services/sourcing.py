@@ -85,122 +85,109 @@ class ApolloService:
         per_page: int = 10,
     ) -> list[Lead]:
         """
-        Searches Apollo's full database (mixed_people/search).
+        Uses DuckDuckGo to scrape LinkedIn profiles for free, bypassing Apollo.
         """
-        if not self.api_key:
-            print("WARNING: Apollo API key not configured. Cannot search.")
+        try:
+            from ddgs import DDGS
+        except ImportError:
+            print("WARNING: ddgs package not installed. Cannot scrape.")
             return []
             
-        # Use mixed_people/search to search the entire Apollo database, not just saved contacts
-        search_url = "https://api.apollo.io/v1/mixed_people/search"
+        import re
+        import uuid
         
-        # Build the payload from structured fields
-        payload: dict = {
-            "page": page,
-            "per_page": per_page,
-            # To reveal emails on the fly (uses API credits):
-            "reveal_emails": True 
-        }
+        # Prevent empty global search
+        if not role and not company and not sector:
+            print("Skipping empty global search to avoid generic results.")
+            return []
         
-        # Role -> person_titles array (Apollo prefers array for titles)
+        # Build search query
+        query_parts = ["site:linkedin.com/in"]
         if role:
-            payload["person_titles"] = [role.strip()]
-            
-        # Sector -> combined into q_keywords or organization_industries
-        if sector:
-            payload["q_keywords"] = sector.strip()
-        
-        # Company -> q_organization_name
+            query_parts.append(f'"{role}"')
         if company:
-            payload["q_organization_name"] = company.strip()
+            query_parts.append(f'"{company}"')
+        if sector:
+            query_parts.append(f'"{sector}"')
+            
+        query = " ".join(query_parts)
+        print(f"Scraping LinkedIn with query: {query}")
         
-        headers = {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-cache",
-            "X-Api-Key": self.api_key
-        }
+        imported_leads = []
         
-        async with httpx.AsyncClient() as client:
-            print(f"Fetching Apollo Leads from global database with payload: {payload}")
-            response = await client.post(search_url, headers=headers, json=payload, timeout=30.0)
-            
-            if response.status_code != 200:
-                print(f"Apollo API Contacts Search error: {response.text}")
-                return []
+        try:
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=per_page))
                 
-            data = response.json()
-            # mixed_people/search returns a 'people' array, not 'contacts'
-            people = data.get("people", [])
-            print(f"Found {len(people)} leads from global search. Importing...")
-            
-            imported_leads = []
-            
-            for person in people:
-                # If we asked for reveal_emails, it might be in 'email' or we might need to handle cases where it fails
-                email = person.get("email")
-                if not email:
-                    continue # Skip if we couldn't get an email
-                first_name = person.get("first_name", "")
-                last_name = person.get("last_name", "")
-                title = person.get("title", "")
-                company = person.get("organization_name", "")
-                linkedin = person.get("linkedin_url", "")
-                
-                apollo_id = person.get("id")
-                
-                # Extract extra data
-                phone_number = person.get("sanitized_phone")
-                if not phone_number and person.get("phone_numbers"):
-                    phone_number = person["phone_numbers"][0].get("sanitized_number") or person["phone_numbers"][0].get("raw_number")
-                if not phone_number:
-                    phone_number = person.get("phone_number", "")
-                
-                city = person.get("city", "")
-                state = person.get("state", "")
-                country = person.get("country", "")
-                # Some apollo contacts have organization object inside
-                org = person.get("organization", {})
-                industry = org.get("industry") if org else person.get("industry", "")
-                
-
-                # Prevent duplicates (Check by apollo_id or email)
-                from sqlalchemy import or_
-                existing_lead = await self.session.execute(
-                    select(Lead).filter(
-                        Lead.organization_id == org_id,
-                        or_(
-                            Lead.apollo_id == apollo_id,
-                            Lead.email == email
-                        )
-                    )
-                )
-                if existing_lead.scalars().first():
-                    continue
+                for r in results:
+                    title_text = r.get('title', '')
+                    linkedin_url = r.get('href', '')
+                    body_text = r.get('body', '')
                     
-                # Create Lead
-                new_lead = Lead(
-                    organization_id=org_id,
-                    email=email,
-                    apollo_id=apollo_id,
-                    first_name=first_name,
-                    last_name=last_name,
-                    company=company,
-                    job_title=title,
-                    linkedin_url=linkedin,
-                    phone_number=phone_number,
-                    city=city,
-                    state=state,
-                    country=country,
-                    industry=industry,
-                    status="new"
-                )
-                self.session.add(new_lead)
-                await self.session.commit()
-                await self.session.refresh(new_lead)
-                
-                # Save the raw contact data as research for the AI
-                await self._save_research(new_lead, org_id, person)
-                imported_leads.append(new_lead)
-                print(f"Imported lead: {email}")
-                
-            return imported_leads
+                    # Usually "First Last - Role - Company | LinkedIn" or similar
+                    parts = title_text.split('-')
+                    if len(parts) >= 1:
+                        name_part = parts[0].strip()
+                        # Clean up " | LinkedIn" if present
+                        name_part = name_part.replace(" | LinkedIn", "").strip()
+                        
+                        name_tokens = name_part.split(' ')
+                        first_name = name_tokens[0] if name_tokens else ""
+                        last_name = " ".join(name_tokens[1:]) if len(name_tokens) > 1 else ""
+                        
+                        # Guess email (e.g. first.last@company.com)
+                        safe_company = re.sub(r'[^a-zA-Z0-9]', '', str(company or 'company').lower())
+                        safe_first = re.sub(r'[^a-zA-Z0-9]', '', first_name.lower())
+                        safe_last = re.sub(r'[^a-zA-Z0-9]', '', last_name.lower())
+                        email = f"{safe_first}.{safe_last}@{safe_company}.com" if safe_last else f"{safe_first}@{safe_company}.com"
+                        
+                        # Use a fake Apollo ID to satisfy the schema/UI
+                        fake_apollo_id = str(uuid.uuid4())
+                        
+                        from sqlalchemy import or_
+                        existing_lead = await self.session.execute(
+                            select(Lead).filter(
+                                Lead.organization_id == org_id,
+                                Lead.email == email
+                            )
+                        )
+                        if existing_lead.scalars().first():
+                            continue
+                            
+                        # Create Lead
+                        new_lead = Lead(
+                            organization_id=org_id,
+                            email=email,
+                            apollo_id=fake_apollo_id,
+                            first_name=first_name,
+                            last_name=last_name,
+                            company=company or "Unknown Company",
+                            job_title=role or "Unknown Role",
+                            linkedin_url=linkedin_url,
+                            phone_number="",
+                            city="",
+                            state="",
+                            country="",
+                            industry=sector or "",
+                            status="new"
+                        )
+                        self.session.add(new_lead)
+                        await self.session.commit()
+                        await self.session.refresh(new_lead)
+                        
+                        # Save the snippet as research for the AI
+                        fake_contact_data = {
+                            "name": name_part,
+                            "title": role,
+                            "organization_name": company,
+                            "linkedin_url": linkedin_url,
+                            "snippet": body_text
+                        }
+                        await self._save_research(new_lead, org_id, fake_contact_data)
+                        imported_leads.append(new_lead)
+                        print(f"Scraped and imported lead: {email}")
+                        
+        except Exception as e:
+            print(f"Scraping error: {e}")
+            
+        return imported_leads
