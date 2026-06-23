@@ -90,11 +90,10 @@ class ApolloService:
         headers = {
             "Content-Type": "application/json",
             "Cache-Control": "no-cache",
+            "X-Api-Key": self.api_key
         }
         
-        # Some Apollo endpoints require the api_key in the payload rather than headers
-        payload = params.copy()
-        payload["api_key"] = self.api_key
+        payload = params
         
         async with httpx.AsyncClient() as client:
             print(f"Fetching saved Apollo Contacts with params: {params}")
