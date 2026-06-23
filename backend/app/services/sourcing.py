@@ -75,17 +75,45 @@ class ApolloService:
         self.session.add(doc)
         await self.session.commit()
 
-    async def search_and_import_leads(self, params: Dict[str, Any], org_id: UUID) -> list[Lead]:
+    async def search_and_import_leads(
+        self,
+        org_id: UUID,
+        role: str = None,
+        sector: str = None,
+        company: str = None,
+        page: int = 1,
+        per_page: int = 10,
+    ) -> list[Lead]:
         """
         Pulls saved Contacts from the user's Apollo account.
-        Since these are saved contacts, they already have emails revealed.
+        Builds targeted search params from structured fields:
+          - role + sector → combined into q_keywords for text search
+          - company → q_organization_name for dedicated company filtering
         """
         if not self.api_key:
             print("WARNING: Apollo API key not configured. Cannot search.")
             return []
             
         search_url = "https://api.apollo.io/v1/contacts/search"
-        payload = params # remove api_key from payload
+        
+        # Build the payload from structured fields
+        payload: dict = {
+            "page": page,
+            "per_page": per_page,
+        }
+        
+        # Combine role + sector into q_keywords for Apollo text search
+        keyword_parts = []
+        if role:
+            keyword_parts.append(role.strip())
+        if sector:
+            keyword_parts.append(sector.strip())
+        if keyword_parts:
+            payload["q_keywords"] = " ".join(keyword_parts)
+        
+        # Use Apollo's dedicated company filter
+        if company:
+            payload["q_organization_name"] = company.strip()
         
         headers = {
             "Content-Type": "application/json",
@@ -93,10 +121,8 @@ class ApolloService:
             "X-Api-Key": self.api_key
         }
         
-        payload = params
-        
         async with httpx.AsyncClient() as client:
-            print(f"Fetching saved Apollo Contacts with params: {params}")
+            print(f"Fetching saved Apollo Contacts with payload: {payload}")
             response = await client.post(search_url, headers=headers, json=payload, timeout=30.0)
             
             if response.status_code != 200:

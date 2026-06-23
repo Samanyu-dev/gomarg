@@ -172,27 +172,11 @@ async def sourcing_tick(session: AsyncSession):
             
         logger.info(f"🔎 Autopilot Sourcing running for campaign '{campaign.name}' (ICP: {icp})")
         
-        base_params = {}
-        if "keywords" in icp and icp["keywords"]:
-            base_params["q_keywords"] = icp["keywords"].strip()
-        if "company" in icp and icp["company"]:
-            base_params["q_organization_name"] = icp["company"].strip()
-            
-        # Keep backwards compatibility just in case
-        if "person_titles" in icp and icp["person_titles"]:
-            base_params["person_titles"] = [t.strip() for t in icp["person_titles"].split(",")]
-        if "person_locations" in icp and icp["person_locations"]:
-            base_params["person_locations"] = [l.strip() for l in icp["person_locations"].split(",")]
-
-        seniorities_to_try = []
-        if "seniorities" in icp and icp["seniorities"]:
-            if isinstance(icp["seniorities"], list):
-                seniorities_to_try = icp["seniorities"]
-            else:
-                seniorities_to_try = [s.strip() for s in icp["seniorities"].split(",")]
-                
-        # Always add a final fallback with NO seniority restriction
-        seniorities_to_try.append(None)
+        # Build structured fields from ICP settings
+        icp_role = icp.get("keywords", "").strip() or None
+        icp_company = icp.get("company", "").strip() or None
+        # Seniorities are handled as keyword additions for the free-tier contacts/search endpoint
+        icp_sector = None  # Can be extended if ICP settings add a sector field
 
         service = ApolloService(session)
         org_id = campaign.organization_id
@@ -201,18 +185,36 @@ async def sourcing_tick(session: AsyncSession):
         total_imported = 0
 
         try:
+            # Build keyword string combining role + seniority for targeted search
+            seniorities_to_try = []
+            if "seniorities" in icp and icp["seniorities"]:
+                if isinstance(icp["seniorities"], list):
+                    seniorities_to_try = icp["seniorities"]
+                else:
+                    seniorities_to_try = [s.strip() for s in icp["seniorities"].split(",")]
+                    
+            # Always add a final fallback with NO seniority restriction
+            seniorities_to_try.append(None)
+
             for seniority in seniorities_to_try:
                 if remaining_limit <= 0:
                     break
-                    
-                params = base_params.copy()
-                params["page"] = 1
-                params["per_page"] = remaining_limit
                 
-                if seniority is not None:
-                    params["person_seniorities"] = [seniority]
+                # Combine role keywords with seniority for q_keywords
+                role_with_seniority = icp_role
+                if seniority and icp_role:
+                    role_with_seniority = f"{icp_role} {seniority}"
+                elif seniority:
+                    role_with_seniority = seniority
                     
-                imported_leads = await service.search_and_import_leads(params=params, org_id=org_id)
+                imported_leads = await service.search_and_import_leads(
+                    org_id=org_id,
+                    role=role_with_seniority,
+                    sector=icp_sector,
+                    company=icp_company,
+                    page=1,
+                    per_page=remaining_limit,
+                )
                 
                 if imported_leads:
                     logger.info(f"✅ Sourcing Agent found {len(imported_leads)} new leads for campaign {campaign.id} (Seniority: {seniority or 'ALL'})")

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
-import { RefreshCw, Search, CheckSquare } from 'lucide-react';
+import { RefreshCw, Search, CheckSquare, Sparkles, X } from 'lucide-react';
 
 interface Lead {
   id: string;
@@ -43,10 +43,28 @@ export default function SourcingPage() {
 
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  
+  // ── New: 3-field Apollo search params ──
   const [filterParams, setFilterParams] = useState({
-    q_keywords: '',
+    role: '',
+    sector: '',
+    company: '',
     per_page: '10'
   });
+
+  // ── New: Email customization modal state ──
+  const [isEmailCustomModalOpen, setIsEmailCustomModalOpen] = useState(false);
+  const [emailCustomLeadId, setEmailCustomLeadId] = useState<string | null>(null);
+  const [emailCustomParams, setEmailCustomParams] = useState({
+    campaign_goal: 'Introduce our product and book a 15 min demo',
+    tone: 'professional',
+    writing_style: 'concise',
+    cta_type: 'reply_question',
+    sender_name: '',
+    sender_company: '',
+    custom_instructions: ''
+  });
+
   const [manualLead, setManualLead] = useState({
     first_name: '',
     last_name: '',
@@ -75,22 +93,44 @@ export default function SourcingPage() {
     fetchData();
   }, []);
 
-  const handleGenerateEmail = async (leadId: string) => {
-    setGeneratingId(leadId);
-    const toastId = toast.loading('AI is writing email...');
+  // ── Open customization modal for a lead ──
+  const openEmailCustomModal = (leadId: string) => {
+    setEmailCustomLeadId(leadId);
+    setIsEmailCustomModalOpen(true);
+  };
+
+  // ── Generate email with customization ──
+  const handleGenerateEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailCustomLeadId) return;
+    
+    setIsEmailCustomModalOpen(false);
+    setGeneratingId(emailCustomLeadId);
+    const toastId = toast.loading('AI is writing a personalised email...');
+    
     try {
-      const res = await api.post(`/generate/email/${leadId}`, {
-        campaign_goal: 'Introduce GoMarg AI Sales automation platform and book a 15 min demo'
-      });
+      const payload: any = {
+        campaign_goal: emailCustomParams.campaign_goal,
+        tone: emailCustomParams.tone,
+        writing_style: emailCustomParams.writing_style,
+        cta_type: emailCustomParams.cta_type,
+      };
+      if (emailCustomParams.sender_name) payload.sender_name = emailCustomParams.sender_name;
+      if (emailCustomParams.sender_company) payload.sender_company = emailCustomParams.sender_company;
+      if (emailCustomParams.custom_instructions) payload.custom_instructions = emailCustomParams.custom_instructions;
+
+      const res = await api.post(`/generate/email/${emailCustomLeadId}`, payload);
       setSelectedEmail(res.data);
       toast.success('Email generated successfully!', { id: toastId });
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to generate email', { id: toastId });
     } finally {
       setGeneratingId(null);
+      setEmailCustomLeadId(null);
     }
   };
 
+  // ── Fetch leads from Apollo with 3 structured fields ──
   const handleGetLeads = async (e: React.FormEvent) => {
     e.preventDefault();
     setSyncing(true);
@@ -98,13 +138,17 @@ export default function SourcingPage() {
     const toastId = toast.loading('Fetching contacts from Apollo...');
     
     try {
-      const res = await api.post('/sourcing/apollo', {
+      const payload: any = {
         page: 1,
         per_page: parseInt(filterParams.per_page),
-        q_keywords: filterParams.q_keywords || undefined
-      });
-      toast.success(`Successfully imported contacts!`, { id: toastId });
-      await fetchData(); // refresh the table
+      };
+      if (filterParams.role) payload.role = filterParams.role;
+      if (filterParams.sector) payload.sector = filterParams.sector;
+      if (filterParams.company) payload.company = filterParams.company;
+
+      const res = await api.post('/sourcing/apollo', payload);
+      toast.success(`Successfully imported ${res.data.leads_imported} contacts!`, { id: toastId });
+      await fetchData();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to sync leads', { id: toastId });
     } finally {
@@ -333,10 +377,11 @@ export default function SourcingPage() {
                     </td>
                     <td className="p-4 text-right">
                       <button
-                        onClick={() => handleGenerateEmail(lead.id)}
+                        onClick={() => openEmailCustomModal(lead.id)}
                         disabled={generatingId === lead.id}
-                        className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-lg shadow-purple-500/20 disabled:opacity-50"
+                        className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-lg shadow-purple-500/20 disabled:opacity-50 flex items-center gap-1.5 ml-auto"
                       >
+                        <Sparkles className="w-3.5 h-3.5" />
                         {generatingId === lead.id ? 'Generating...' : 'Generate AI Email'}
                       </button>
                     </td>
@@ -379,29 +424,62 @@ export default function SourcingPage() {
         </div>
       )}
 
-      {/* Sourcing Filter Modal */}
+      {/* ═══════════════════════════════════════════════════
+          SOURCING FILTER MODAL — 3 structured fields
+          ═══════════════════════════════════════════════════ */}
       {isFilterModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="glass w-full max-w-md p-6 rounded-2xl border border-white/10 animate-in">
-            <h2 className="text-2xl font-bold mb-4">Fetch More Leads</h2>
-            <p className="text-sm text-muted-foreground mb-6">Search your saved Apollo contacts to import them into GoMarg.</p>
+          <div className="glass w-full max-w-lg p-6 rounded-2xl border border-white/10 animate-in">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-2xl font-bold">Fetch Apollo Leads</h2>
+              <button onClick={() => setIsFilterModalOpen(false)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                <X className="w-5 h-5 text-muted-foreground" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-6">Search your saved Apollo contacts with targeted filters.</p>
             <form onSubmit={handleGetLeads}>
               <div className="space-y-4 mb-6">
+                {/* Role */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">Search Keywords (Optional)</label>
+                  <label className="block text-sm font-medium mb-2">Role / Job Title</label>
                   <input 
                     type="text" 
-                    placeholder="e.g. CEO, Software, Apple"
-                    className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500/50"
-                    value={filterParams.q_keywords}
-                    onChange={(e) => setFilterParams({...filterParams, q_keywords: e.target.value})}
+                    placeholder="e.g. Data Engineer, VP Sales, Product Manager"
+                    className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500/50 transition-colors"
+                    value={filterParams.role}
+                    onChange={(e) => setFilterParams({...filterParams, role: e.target.value})}
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Searches name, title, company within your saved contacts.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Filter contacts by their job title or role.</p>
                 </div>
+                {/* Sector */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Sector / Industry</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Healthcare, FinTech, SaaS"
+                    className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500/50 transition-colors"
+                    value={filterParams.sector}
+                    onChange={(e) => setFilterParams({...filterParams, sector: e.target.value})}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Filter by industry or sector keywords.</p>
+                </div>
+                {/* Company */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Company</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Apple, Google, Optum"
+                    className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500/50 transition-colors"
+                    value={filterParams.company}
+                    onChange={(e) => setFilterParams({...filterParams, company: e.target.value})}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Filter by specific company name.</p>
+                </div>
+                {/* Number of leads */}
                 <div>
                   <label className="block text-sm font-medium mb-2">Number of Leads to Fetch</label>
                   <select
-                    className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500/50"
+                    className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500/50 transition-colors"
                     value={filterParams.per_page}
                     onChange={(e) => setFilterParams({...filterParams, per_page: e.target.value})}
                   >
@@ -422,9 +500,138 @@ export default function SourcingPage() {
                 </button>
                 <button 
                   type="submit" 
-                  className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-all"
+                  className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-medium transition-all shadow-lg shadow-blue-500/20"
                 >
                   Import Leads
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════
+          EMAIL CUSTOMIZATION MODAL — tone, style, CTA
+          ═══════════════════════════════════════════════════ */}
+      {isEmailCustomModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="glass w-full max-w-lg p-6 rounded-2xl border border-white/10 animate-in max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-2xl font-bold flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-400" /> Customise AI Email
+              </h2>
+              <button onClick={() => setIsEmailCustomModalOpen(false)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                <X className="w-5 h-5 text-muted-foreground" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-6">Fine-tune how the AI writes this email. The more context you give, the better the output.</p>
+            <form onSubmit={handleGenerateEmail}>
+              <div className="space-y-4 mb-6">
+                {/* Campaign Goal */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Campaign Goal</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Book a 15-min product demo"
+                    className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors"
+                    value={emailCustomParams.campaign_goal}
+                    onChange={(e) => setEmailCustomParams({...emailCustomParams, campaign_goal: e.target.value})}
+                  />
+                </div>
+
+                {/* Tone + Writing Style — side by side */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Tone</label>
+                    <select
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors"
+                      value={emailCustomParams.tone}
+                      onChange={(e) => setEmailCustomParams({...emailCustomParams, tone: e.target.value})}
+                    >
+                      <option value="professional">Professional</option>
+                      <option value="casual">Casual</option>
+                      <option value="bold">Bold</option>
+                      <option value="friendly">Friendly</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Writing Style</label>
+                    <select
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors"
+                      value={emailCustomParams.writing_style}
+                      onChange={(e) => setEmailCustomParams({...emailCustomParams, writing_style: e.target.value})}
+                    >
+                      <option value="concise">Concise</option>
+                      <option value="storytelling">Storytelling</option>
+                      <option value="data-driven">Data-Driven</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* CTA Type */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Call to Action</label>
+                  <select
+                    className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors"
+                    value={emailCustomParams.cta_type}
+                    onChange={(e) => setEmailCustomParams({...emailCustomParams, cta_type: e.target.value})}
+                  >
+                    <option value="reply_question">Ask a Question (easy reply)</option>
+                    <option value="book_meeting">Book a Meeting</option>
+                    <option value="visit_link">Visit a Link / Resource</option>
+                  </select>
+                </div>
+
+                {/* Sender Name + Company — side by side */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Your Name <span className="text-muted-foreground text-xs">(optional)</span></label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Samanyu"
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors"
+                      value={emailCustomParams.sender_name}
+                      onChange={(e) => setEmailCustomParams({...emailCustomParams, sender_name: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Your Company <span className="text-muted-foreground text-xs">(optional)</span></label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. GoMarg"
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors"
+                      value={emailCustomParams.sender_company}
+                      onChange={(e) => setEmailCustomParams({...emailCustomParams, sender_company: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                {/* Custom Instructions */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Custom Instructions <span className="text-muted-foreground text-xs">(optional)</span></label>
+                  <textarea
+                    rows={3}
+                    placeholder="e.g. Mention our recent Series A funding, don't use emojis, keep it under 50 words..."
+                    className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors resize-none"
+                    value={emailCustomParams.custom_instructions}
+                    onChange={(e) => setEmailCustomParams({...emailCustomParams, custom_instructions: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => setIsEmailCustomModalOpen(false)}
+                  className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-medium transition-all shadow-lg shadow-purple-500/20 flex items-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Generate Email
                 </button>
               </div>
             </form>

@@ -201,7 +201,3 @@ GEMINI_API_KEY=your_llm_api_key
 - **Lint Code:** `npm run lint`
 - **Build Production Bundle:** `npm run build`
 - **Clear Next.js Cache:** `rm -rf .next`
-
-
-
-

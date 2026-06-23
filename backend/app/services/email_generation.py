@@ -91,6 +91,134 @@ class AIEmailGenerator:
         )
 
     # ─────────────────────────────────────────
+    # STANDALONE: generate a customised email for a specific lead
+    # Used by the Sourcing page "Generate AI Email" button
+    # ─────────────────────────────────────────
+    async def generate_email(
+        self,
+        lead_id: UUID,
+        org_id: UUID,
+        campaign_goal: str = "Book a meeting",
+        tone: str = "professional",
+        writing_style: str = "concise",
+        cta_type: str = "reply_question",
+        sender_name: str = None,
+        sender_company: str = None,
+        custom_instructions: str = None,
+    ) -> dict:
+        """
+        Generates a deeply personalised cold email for a single lead
+        using their research data and the user's customization preferences.
+        Returns a dict with subject, intro_sentence, and full_body.
+        """
+        if not self.client:
+            raise ValueError("GEMINI_API_KEY is not configured.")
+
+        # Fetch lead
+        lead_result = await self.session.execute(
+            select(Lead).filter(Lead.id == lead_id, Lead.organization_id == org_id)
+        )
+        lead = lead_result.scalars().first()
+        if not lead:
+            raise ValueError(f"Lead {lead_id} not found in this organization.")
+
+        # Pull research context for deep personalisation
+        research_context = await self._get_research_context(lead_id)
+
+        # Map CTA type to instruction
+        cta_map = {
+            "book_meeting": "End with a clear ask to book a 15-minute call. Include a placeholder [BOOKING_LINK].",
+            "reply_question": "End with a single, thoughtful question that makes it easy to reply with one sentence.",
+            "visit_link": "End by directing them to a specific resource. Include a placeholder [RESOURCE_LINK].",
+        }
+        cta_instruction = cta_map.get(cta_type, cta_map["reply_question"])
+
+        # Map writing style to instruction
+        style_map = {
+            "concise": "Be extremely concise. Every sentence must earn its place. Target 60-80 words for the body.",
+            "storytelling": "Open with a brief, vivid anecdote or scenario that the recipient would relate to. Target 100-120 words.",
+            "data-driven": "Include 1-2 specific data points, stats, or metrics relevant to their industry or role. Target 80-100 words.",
+        }
+        style_instruction = style_map.get(writing_style, style_map["concise"])
+
+        # Build the sender sign-off
+        sign_off_parts = []
+        if sender_name:
+            sign_off_parts.append(sender_name)
+        if sender_company:
+            sign_off_parts.append(sender_company)
+        sign_off_instruction = f"Sign off as: {', '.join(sign_off_parts)}" if sign_off_parts else "Use a simple sign-off like 'Best,' or 'Cheers,'"
+
+        prompt = f"""
+You are an elite B2B sales SDR writing a cold outreach email.
+
+TARGET LEAD:
+  Name: {lead.first_name} {lead.last_name}
+  Title: {lead.job_title or 'Unknown'}
+  Company: {lead.company or 'Unknown'}
+  Industry: {lead.industry or 'Unknown'}
+  Location: {lead.city or ''}{', ' + lead.country if lead.country else ''}
+  LinkedIn: {lead.linkedin_url or 'N/A'}
+
+RESEARCH DATA (use this for deep personalisation — reference specific details):
+{research_context}
+
+CAMPAIGN GOAL: {campaign_goal}
+
+TONE: Write in a {tone} tone.
+  - casual: Like texting a smart colleague. Short sentences, contractions, lowercase energy.
+  - professional: Polished but human. No corporate jargon.
+  - bold: Confident and direct. Make a strong claim. Challenge their status quo.
+  - friendly: Warm and approachable. Like a helpful neighbor who happens to work in their industry.
+
+WRITING STYLE: {style_instruction}
+
+CALL TO ACTION: {cta_instruction}
+
+SIGN-OFF: {sign_off_instruction}
+
+{f'ADDITIONAL INSTRUCTIONS FROM USER: {custom_instructions}' if custom_instructions else ''}
+
+HARD RULES:
+- NEVER use these words: "synergy", "leverage", "circle back", "just checking in", "hope this email finds you well"
+- Reference at least ONE specific detail from the Research Data section (company info, role specifics, industry context)
+- The subject line must be under 60 characters, curiosity-inducing, and NOT clickbait
+- The first sentence must hook them — mention something specific about THEM, not about you
+- Sound like a real human wrote this, not an AI or a template
+- Do NOT use markdown formatting in the email body — plain text only
+
+Return a JSON object with exactly three keys:
+  "subject" (string) — the email subject line
+  "intro_sentence" (string) — just the opening sentence for preview
+  "full_body" (string) — the complete email body including greeting and sign-off
+"""
+
+        result = await self._call_gemini(prompt, EmailOutput)
+        
+        # Extract intro_sentence from the body if not provided separately
+        body = result.get("body", "")
+        subject = result.get("subject", "")
+        
+        # The prompt asks for intro_sentence but the EmailOutput schema only has subject/body
+        # Split the first sentence from the body as the intro
+        lines = body.strip().split('\n')
+        # Skip greeting line to find the actual intro
+        intro = ""
+        for line in lines:
+            stripped = line.strip()
+            if stripped and not stripped.lower().startswith(('hi ', 'hey ', 'hello ', 'dear ')):
+                intro = stripped
+                break
+        if not intro and lines:
+            intro = lines[0].strip()
+
+        return {
+            "subject": subject,
+            "intro_sentence": intro,
+            "full_body": body,
+        }
+
+    # ─────────────────────────────────────────
     # PRIMARY: generate email for a specific campaign step
     # ─────────────────────────────────────────
     async def generate_email_for_step(

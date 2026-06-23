@@ -16,12 +16,19 @@ async def search_and_import_apollo_leads(
     """
     Search Apollo for new leads matching the given criteria, enrich their emails,
     and save them directly into the current organization's lead database.
+    Supports filtering by role, sector, and company as separate fields.
     """
     service = ApolloService(session)
-    params = request.model_dump(exclude_none=True)
     
     try:
-        imported_leads = await service.search_and_import_leads(params=params, org_id=UUID(current_org_id))
+        imported_leads = await service.search_and_import_leads(
+            role=request.role,
+            sector=request.sector,
+            company=request.company,
+            page=request.page,
+            per_page=request.per_page,
+            org_id=UUID(current_org_id)
+        )
         imported_count = len(imported_leads)
         return ApolloSearchResponse(
             success=True,
@@ -30,3 +37,4 @@ async def search_and_import_apollo_leads(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Sourcing pipeline failed: {str(e)}")
+
