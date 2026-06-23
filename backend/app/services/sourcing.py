@@ -85,33 +85,32 @@ class ApolloService:
         per_page: int = 10,
     ) -> list[Lead]:
         """
-        Pulls saved Contacts from the user's Apollo account.
-        Builds targeted search params from structured fields:
-          - role + sector → combined into q_keywords for text search
-          - company → q_organization_name for dedicated company filtering
+        Searches Apollo's full database (mixed_people/search).
         """
         if not self.api_key:
             print("WARNING: Apollo API key not configured. Cannot search.")
             return []
             
-        search_url = "https://api.apollo.io/v1/contacts/search"
+        # Use mixed_people/search to search the entire Apollo database, not just saved contacts
+        search_url = "https://api.apollo.io/v1/mixed_people/search"
         
         # Build the payload from structured fields
         payload: dict = {
             "page": page,
             "per_page": per_page,
+            # To reveal emails on the fly (uses API credits):
+            "reveal_emails": True 
         }
         
-        # Combine role + sector into q_keywords for Apollo text search
-        keyword_parts = []
+        # Role -> person_titles array (Apollo prefers array for titles)
         if role:
-            keyword_parts.append(role.strip())
+            payload["person_titles"] = [role.strip()]
+            
+        # Sector -> combined into q_keywords or organization_industries
         if sector:
-            keyword_parts.append(sector.strip())
-        if keyword_parts:
-            payload["q_keywords"] = " ".join(keyword_parts)
+            payload["q_keywords"] = sector.strip()
         
-        # Use Apollo's dedicated company filter
+        # Company -> q_organization_name
         if company:
             payload["q_organization_name"] = company.strip()
         
@@ -122,7 +121,7 @@ class ApolloService:
         }
         
         async with httpx.AsyncClient() as client:
-            print(f"Fetching saved Apollo Contacts with payload: {payload}")
+            print(f"Fetching Apollo Leads from global database with payload: {payload}")
             response = await client.post(search_url, headers=headers, json=payload, timeout=30.0)
             
             if response.status_code != 200:
@@ -130,38 +129,40 @@ class ApolloService:
                 return []
                 
             data = response.json()
-            contacts = data.get("contacts", [])
-            print(f"Found {len(contacts)} saved contacts. Importing...")
+            # mixed_people/search returns a 'people' array, not 'contacts'
+            people = data.get("people", [])
+            print(f"Found {len(people)} leads from global search. Importing...")
             
             imported_leads = []
             
-            for contact in contacts:
-                email = contact.get("email")
+            for person in people:
+                # If we asked for reveal_emails, it might be in 'email' or we might need to handle cases where it fails
+                email = person.get("email")
                 if not email:
-                    continue # Skip if the saved contact doesn't have an email
-                    
-                first_name = contact.get("first_name", "")
-                last_name = contact.get("last_name", "")
-                title = contact.get("title", "")
-                company = contact.get("organization_name", "")
-                linkedin = contact.get("linkedin_url", "")
+                    continue # Skip if we couldn't get an email
+                first_name = person.get("first_name", "")
+                last_name = person.get("last_name", "")
+                title = person.get("title", "")
+                company = person.get("organization_name", "")
+                linkedin = person.get("linkedin_url", "")
                 
-                apollo_id = contact.get("id")
+                apollo_id = person.get("id")
                 
                 # Extract extra data
-                phone_number = contact.get("sanitized_phone")
-                if not phone_number and contact.get("phone_numbers"):
-                    phone_number = contact["phone_numbers"][0].get("sanitized_number") or contact["phone_numbers"][0].get("raw_number")
+                phone_number = person.get("sanitized_phone")
+                if not phone_number and person.get("phone_numbers"):
+                    phone_number = person["phone_numbers"][0].get("sanitized_number") or person["phone_numbers"][0].get("raw_number")
                 if not phone_number:
-                    phone_number = contact.get("phone_number", "")
+                    phone_number = person.get("phone_number", "")
                 
-                city = contact.get("city", "")
-                state = contact.get("state", "")
-                country = contact.get("country", "")
+                city = person.get("city", "")
+                state = person.get("state", "")
+                country = person.get("country", "")
                 # Some apollo contacts have organization object inside
-                org = contact.get("organization", {})
-                industry = org.get("industry") if org else contact.get("industry", "")
+                org = person.get("organization", {})
+                industry = org.get("industry") if org else person.get("industry", "")
                 
+
                 # Prevent duplicates (Check by apollo_id or email)
                 from sqlalchemy import or_
                 existing_lead = await self.session.execute(
@@ -198,7 +199,7 @@ class ApolloService:
                 await self.session.refresh(new_lead)
                 
                 # Save the raw contact data as research for the AI
-                await self._save_research(new_lead, org_id, contact)
+                await self._save_research(new_lead, org_id, person)
                 imported_leads.append(new_lead)
                 print(f"Imported lead: {email}")
                 

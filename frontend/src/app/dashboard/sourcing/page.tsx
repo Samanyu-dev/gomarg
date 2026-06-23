@@ -31,7 +31,7 @@ export default function SourcingPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
-  const [selectedEmail, setSelectedEmail] = useState<{subject: string, full_body: string} | null>(null);
+  const [selectedEmail, setSelectedEmail] = useState<{ subject: string, full_body: string } | null>(null);
 
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
   const [selectedCampaignId, setSelectedCampaignId] = useState('');
@@ -43,7 +43,7 @@ export default function SourcingPage() {
 
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
-  
+
   // ── New: 3-field Apollo search params ──
   const [filterParams, setFilterParams] = useState({
     role: '',
@@ -103,11 +103,11 @@ export default function SourcingPage() {
   const handleGenerateEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailCustomLeadId) return;
-    
+
     setIsEmailCustomModalOpen(false);
     setGeneratingId(emailCustomLeadId);
     const toastId = toast.loading('AI is writing a personalised email...');
-    
+
     try {
       const payload: any = {
         campaign_goal: emailCustomParams.campaign_goal,
@@ -136,7 +136,7 @@ export default function SourcingPage() {
     setSyncing(true);
     setIsFilterModalOpen(false);
     const toastId = toast.loading('Fetching contacts from Apollo...');
-    
+
     try {
       const payload: any = {
         page: 1,
@@ -174,11 +174,11 @@ export default function SourcingPage() {
   };
 
   const filteredLeads = leads.filter(lead => {
-    const matchesSearch = !searchQuery || 
+    const matchesSearch = !searchQuery ||
       `${lead.first_name} ${lead.last_name} ${lead.email} ${lead.company}`.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTitle = !titleFilter || (lead.job_title && lead.job_title.toLowerCase().includes(titleFilter.toLowerCase()));
     const matchesIndustry = !industryFilter || (lead.industry && lead.industry.toLowerCase().includes(industryFilter.toLowerCase()));
-    const matchesLocation = !locationFilter || 
+    const matchesLocation = !locationFilter ||
       `${lead.city || ''} ${lead.state || ''} ${lead.country || ''}`.toLowerCase().includes(locationFilter.toLowerCase());
     return matchesSearch && matchesTitle && matchesIndustry && matchesLocation;
   });
@@ -222,7 +222,7 @@ export default function SourcingPage() {
           <h1 className="text-3xl font-bold mb-2">Lead Sourcing</h1>
           <p className="text-muted-foreground">Search and import your saved contacts from Apollo.</p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsManualModalOpen(true)}
@@ -246,9 +246,9 @@ export default function SourcingPage() {
           <div className="flex flex-wrap items-center gap-4 w-full">
             <div className="relative w-64">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input 
-                type="text" 
-                placeholder="Search name, email, company..." 
+              <input
+                type="text"
+                placeholder="Search name, email, company..."
                 className="w-full bg-black/20 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-blue-500/50"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -283,7 +283,7 @@ export default function SourcingPage() {
           {selectedLeadIds.size > 0 && (
             <div className="flex items-center gap-2 animate-in slide-in-from-right-4 fade-in">
               <span className="text-sm font-medium mr-2">{selectedLeadIds.size} selected</span>
-              <select 
+              <select
                 className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500/50"
                 value={selectedCampaignId}
                 onChange={(e) => setSelectedCampaignId(e.target.value)}
@@ -293,7 +293,7 @@ export default function SourcingPage() {
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              <button 
+              <button
                 onClick={handleAddToCampaign}
                 disabled={!selectedCampaignId}
                 className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
@@ -309,8 +309,8 @@ export default function SourcingPage() {
             <thead>
               <tr className="border-b border-white/10 bg-secondary/10">
                 <th className="p-4 w-12 text-center">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     className="rounded border-white/20 bg-black/50"
                     onChange={handleSelectAll}
                     checked={filteredLeads.length > 0 && selectedLeadIds.size === filteredLeads.length}
@@ -342,8 +342,8 @@ export default function SourcingPage() {
                 filteredLeads.map((lead) => (
                   <tr key={lead.id} className="hover:bg-white/5 transition-colors">
                     <td className="p-4 text-center">
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         className="rounded border-white/20 bg-black/50"
                         checked={selectedLeadIds.has(lead.id)}
                         onChange={() => handleSelectLead(lead.id)}
@@ -413,7 +413,7 @@ export default function SourcingPage() {
               </div>
             </div>
             <div className="mt-8 flex justify-end">
-              <button 
+              <button
                 onClick={() => setSelectedEmail(null)}
                 className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-lg font-medium transition-colors"
               >
@@ -442,36 +442,36 @@ export default function SourcingPage() {
                 {/* Role */}
                 <div>
                   <label className="block text-sm font-medium mb-2">Role / Job Title</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="e.g. Data Engineer, VP Sales, Product Manager"
                     className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500/50 transition-colors"
                     value={filterParams.role}
-                    onChange={(e) => setFilterParams({...filterParams, role: e.target.value})}
+                    onChange={(e) => setFilterParams({ ...filterParams, role: e.target.value })}
                   />
                   <p className="text-xs text-muted-foreground mt-1">Filter contacts by their job title or role.</p>
                 </div>
                 {/* Sector */}
                 <div>
                   <label className="block text-sm font-medium mb-2">Sector / Industry</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="e.g. Healthcare, FinTech, SaaS"
                     className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500/50 transition-colors"
                     value={filterParams.sector}
-                    onChange={(e) => setFilterParams({...filterParams, sector: e.target.value})}
+                    onChange={(e) => setFilterParams({ ...filterParams, sector: e.target.value })}
                   />
                   <p className="text-xs text-muted-foreground mt-1">Filter by industry or sector keywords.</p>
                 </div>
                 {/* Company */}
                 <div>
                   <label className="block text-sm font-medium mb-2">Company</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="e.g. Apple, Google, Optum"
                     className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500/50 transition-colors"
                     value={filterParams.company}
-                    onChange={(e) => setFilterParams({...filterParams, company: e.target.value})}
+                    onChange={(e) => setFilterParams({ ...filterParams, company: e.target.value })}
                   />
                   <p className="text-xs text-muted-foreground mt-1">Filter by specific company name.</p>
                 </div>
@@ -481,7 +481,7 @@ export default function SourcingPage() {
                   <select
                     className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500/50 transition-colors"
                     value={filterParams.per_page}
-                    onChange={(e) => setFilterParams({...filterParams, per_page: e.target.value})}
+                    onChange={(e) => setFilterParams({ ...filterParams, per_page: e.target.value })}
                   >
                     <option value="10">10 Leads</option>
                     <option value="25">25 Leads</option>
@@ -491,15 +491,15 @@ export default function SourcingPage() {
                 </div>
               </div>
               <div className="flex justify-end gap-3">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setIsFilterModalOpen(false)}
                   className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-medium transition-all shadow-lg shadow-blue-500/20"
                 >
                   Import Leads
@@ -530,12 +530,12 @@ export default function SourcingPage() {
                 {/* Campaign Goal */}
                 <div>
                   <label className="block text-sm font-medium mb-2">Campaign Goal</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="e.g. Book a 15-min product demo"
                     className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors"
                     value={emailCustomParams.campaign_goal}
-                    onChange={(e) => setEmailCustomParams({...emailCustomParams, campaign_goal: e.target.value})}
+                    onChange={(e) => setEmailCustomParams({ ...emailCustomParams, campaign_goal: e.target.value })}
                   />
                 </div>
 
@@ -546,7 +546,7 @@ export default function SourcingPage() {
                     <select
                       className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors"
                       value={emailCustomParams.tone}
-                      onChange={(e) => setEmailCustomParams({...emailCustomParams, tone: e.target.value})}
+                      onChange={(e) => setEmailCustomParams({ ...emailCustomParams, tone: e.target.value })}
                     >
                       <option value="professional">Professional</option>
                       <option value="casual">Casual</option>
@@ -559,7 +559,7 @@ export default function SourcingPage() {
                     <select
                       className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors"
                       value={emailCustomParams.writing_style}
-                      onChange={(e) => setEmailCustomParams({...emailCustomParams, writing_style: e.target.value})}
+                      onChange={(e) => setEmailCustomParams({ ...emailCustomParams, writing_style: e.target.value })}
                     >
                       <option value="concise">Concise</option>
                       <option value="storytelling">Storytelling</option>
@@ -574,7 +574,7 @@ export default function SourcingPage() {
                   <select
                     className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors"
                     value={emailCustomParams.cta_type}
-                    onChange={(e) => setEmailCustomParams({...emailCustomParams, cta_type: e.target.value})}
+                    onChange={(e) => setEmailCustomParams({ ...emailCustomParams, cta_type: e.target.value })}
                   >
                     <option value="reply_question">Ask a Question (easy reply)</option>
                     <option value="book_meeting">Book a Meeting</option>
@@ -586,22 +586,22 @@ export default function SourcingPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-2">Your Name <span className="text-muted-foreground text-xs">(optional)</span></label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       placeholder="e.g. Samanyu"
                       className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors"
                       value={emailCustomParams.sender_name}
-                      onChange={(e) => setEmailCustomParams({...emailCustomParams, sender_name: e.target.value})}
+                      onChange={(e) => setEmailCustomParams({ ...emailCustomParams, sender_name: e.target.value })}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-2">Your Company <span className="text-muted-foreground text-xs">(optional)</span></label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       placeholder="e.g. GoMarg"
                       className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors"
                       value={emailCustomParams.sender_company}
-                      onChange={(e) => setEmailCustomParams({...emailCustomParams, sender_company: e.target.value})}
+                      onChange={(e) => setEmailCustomParams({ ...emailCustomParams, sender_company: e.target.value })}
                     />
                   </div>
                 </div>
@@ -614,20 +614,20 @@ export default function SourcingPage() {
                     placeholder="e.g. Mention our recent Series A funding, don't use emojis, keep it under 50 words..."
                     className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500/50 transition-colors resize-none"
                     value={emailCustomParams.custom_instructions}
-                    onChange={(e) => setEmailCustomParams({...emailCustomParams, custom_instructions: e.target.value})}
+                    onChange={(e) => setEmailCustomParams({ ...emailCustomParams, custom_instructions: e.target.value })}
                   />
                 </div>
               </div>
               <div className="flex justify-end gap-3">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setIsEmailCustomModalOpen(false)}
                   className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-medium transition-all shadow-lg shadow-purple-500/20 flex items-center gap-2"
                 >
                   <Sparkles className="w-4 h-4" />
@@ -650,64 +650,64 @@ export default function SourcingPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-2">First Name</label>
-                    <input 
+                    <input
                       required
-                      type="text" 
+                      type="text"
                       className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500/50"
                       value={manualLead.first_name}
-                      onChange={(e) => setManualLead({...manualLead, first_name: e.target.value})}
+                      onChange={(e) => setManualLead({ ...manualLead, first_name: e.target.value })}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-2">Last Name</label>
-                    <input 
+                    <input
                       required
-                      type="text" 
+                      type="text"
                       className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500/50"
                       value={manualLead.last_name}
-                      onChange={(e) => setManualLead({...manualLead, last_name: e.target.value})}
+                      onChange={(e) => setManualLead({ ...manualLead, last_name: e.target.value })}
                     />
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-2">Email Address</label>
-                  <input 
+                  <input
                     required
-                    type="email" 
+                    type="email"
                     className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500/50"
                     value={manualLead.email}
-                    onChange={(e) => setManualLead({...manualLead, email: e.target.value})}
+                    onChange={(e) => setManualLead({ ...manualLead, email: e.target.value })}
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-2">Company</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500/50"
                     value={manualLead.company}
-                    onChange={(e) => setManualLead({...manualLead, company: e.target.value})}
+                    onChange={(e) => setManualLead({ ...manualLead, company: e.target.value })}
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-2">Job Title</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500/50"
                     value={manualLead.job_title}
-                    onChange={(e) => setManualLead({...manualLead, job_title: e.target.value})}
+                    onChange={(e) => setManualLead({ ...manualLead, job_title: e.target.value })}
                   />
                 </div>
               </div>
               <div className="flex justify-end gap-3">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setIsManualModalOpen(false)}
                   className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-all"
                 >
                   Create Lead
