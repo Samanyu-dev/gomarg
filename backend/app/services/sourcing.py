@@ -98,10 +98,12 @@ class ApolloService:
             print("Skipping empty global search to avoid generic results.")
             return []
 
-        if self.api_key:
+        if settings.EXA_API_KEY:
+            return await self._exa_search_pipeline(org_id, role, sector, company, page, per_page)
+        elif self.api_key:
             return await self._apollo_search_pipeline(org_id, role, sector, company, page, per_page)
         else:
-            print("WARNING: No Apollo API key. Falling back to DuckDuckGo scraper (degraded mode).")
+            print("WARNING: No Apollo or Exa API key. Falling back to DuckDuckGo scraper (degraded mode).")
             return await self._ddg_fallback_pipeline(org_id, role, sector, company, page, per_page)
 
     # ═════════════════════════════════════════════
@@ -381,9 +383,9 @@ class ApolloService:
         This provides names + guessed emails but NO phone numbers.
         """
         try:
-            from ddgs import DDGS
+            from duckduckgo_search import DDGS
         except ImportError:
-            print("WARNING: ddgs package not installed. Cannot scrape.")
+            print("WARNING: duckduckgo_search package not installed. Cannot scrape.")
             return []
 
         query_parts = ["site:linkedin.com/in"]
@@ -471,6 +473,135 @@ class ApolloService:
 
         except Exception as e:
             print(f"DuckDuckGo scraping error: {e}")
+
+        return imported_leads
+
+    # ═════════════════════════════════════════════
+    # STAGE 1: Exa AI Search (Discovery)
+    # ═════════════════════════════════════════════
+    async def _exa_search_pipeline(
+        self, org_id: UUID, role: str, sector: str, company: str, page: int, per_page: int
+    ) -> list[Lead]:
+        """
+        Uses Exa AI to search for LinkedIn profiles (highly accurate and unblocked).
+        Then tries to enrich via Apollo if key is present (though free tier blocks it).
+        """
+        try:
+            from exa_py import Exa
+        except ImportError:
+            print("WARNING: exa_py not installed. Falling back to Apollo/DDG.")
+            return []
+
+        exa = Exa(api_key=settings.EXA_API_KEY)
+        query_parts = ["LinkedIn profile of"]
+        if role:
+            query_parts.append(role)
+        if company:
+            query_parts.append(f"at {company}")
+        if sector:
+            query_parts.append(f"in {sector}")
+
+        query = " ".join(query_parts)
+        print(f"🔎 Exa Search: {query}")
+
+        imported_leads = []
+
+        try:
+            # Exa search focusing on LinkedIn profiles
+            results = exa.search(
+                query,
+                use_autoprompt=True,
+                num_results=per_page,
+                include_domains=["linkedin.com"]
+            )
+            
+            for r in results.results:
+                title_text = r.title or ""
+                linkedin_url = r.url or ""
+                
+                if "linkedin.com/in/" not in linkedin_url:
+                    continue
+
+                parts = title_text.split("-")
+                if len(parts) >= 1:
+                    name_part = parts[0].strip().replace(" | LinkedIn", "").strip()
+                    name_tokens = name_part.split(" ")
+                    first_name = name_tokens[0] if name_tokens else ""
+                    last_name = " ".join(name_tokens[1:]) if len(name_tokens) > 1 else ""
+
+                    # Extract job title from LinkedIn title if possible
+                    job_title = parts[1].strip() if len(parts) >= 2 else (role or "Unknown")
+                    job_title = job_title.replace(" | LinkedIn", "").strip()
+
+                    # Extract company from LinkedIn title
+                    lead_company = parts[2].strip().replace(" | LinkedIn", "").strip() if len(parts) >= 3 else (company or "Unknown")
+
+                    # Guess email
+                    safe_company = re.sub(r"[^a-zA-Z0-9]", "", str(lead_company).lower())
+                    safe_first = re.sub(r"[^a-zA-Z0-9]", "", first_name.lower())
+                    safe_last = re.sub(r"[^a-zA-Z0-9]", "", last_name.lower())
+                    email = f"{safe_first}.{safe_last}@{safe_company}.com" if safe_last else f"{safe_first}@{safe_company}.com"
+
+                    # Deduplicate
+                    existing = await self.session.execute(
+                        select(Lead).filter(
+                            Lead.organization_id == org_id,
+                            Lead.email == email,
+                        )
+                    )
+                    if existing.scalars().first():
+                        continue
+
+                    # Try Apollo enrichment (silent fail if blocked)
+                    phone_number = ""
+                    city = ""
+                    if self.api_key:
+                        enriched = await self._apollo_enrich_person(
+                            first_name=first_name,
+                            last_name=last_name,
+                            company=lead_company,
+                            linkedin_url=linkedin_url,
+                            email=email,
+                        )
+                        if enriched:
+                            email = enriched.get("email") or email
+                            phone_number = enriched.get("phone_number") or ""
+                            city = enriched.get("city") or ""
+
+                    new_lead = Lead(
+                        organization_id=org_id,
+                        email=email,
+                        apollo_id=str(uuid.uuid4()),
+                        first_name=first_name,
+                        last_name=last_name,
+                        company=lead_company,
+                        job_title=job_title,
+                        linkedin_url=linkedin_url,
+                        phone_number=phone_number,
+                        city=city,
+                        state="",
+                        country="",
+                        industry=sector or "",
+                        status="new",
+                    )
+                    self.session.add(new_lead)
+                    await self.session.commit()
+                    await self.session.refresh(new_lead)
+
+                    await self._save_research(new_lead, org_id, {
+                        "name": name_part,
+                        "title": job_title,
+                        "organization_name": lead_company,
+                        "linkedin_url": linkedin_url,
+                        "exa_score": getattr(r, "score", None)
+                    })
+                    imported_leads.append(new_lead)
+                    print(f"   ✅ Exa Import: {email}")
+
+        except Exception as e:
+            print(f"Exa search error: {e}")
+            # Fall back to DDG if Exa fails
+            return await self._ddg_fallback_pipeline(org_id, role, sector, company, page, per_page)
 
         return imported_leads
 
