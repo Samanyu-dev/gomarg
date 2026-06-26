@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from uuid import UUID
 import json
-import random
 
 from app.core.config import settings
 from app.models.lead import Lead, ResearchDocument
@@ -165,7 +164,7 @@ class ApolloService:
                             company=company or "Unknown Company",
                             job_title=role or "Unknown Role",
                             linkedin_url=linkedin_url,
-                            phone_number=f"+1 ({random.randint(200, 999)}) {random.randint(200, 999)}-{random.randint(1000, 9999)}",
+                            phone_number="",
                             city="",
                             state="",
                             country="",
