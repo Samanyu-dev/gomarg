@@ -660,11 +660,13 @@ export default function CampaignDetailPage() {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Body</label>
-                <div 
-                  className="mt-1 p-4 bg-secondary/30 rounded-lg border border-white/5 whitespace-pre-wrap text-sm leading-relaxed"
-                  dangerouslySetInnerHTML={{ __html: selectedEmail.body }}
-                />
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Email Preview</label>
+                <div className="bg-white p-8 rounded-xl shadow-2xl overflow-y-auto max-h-[60vh] border border-white/10">
+                  <div 
+                    className="whitespace-normal text-left"
+                    dangerouslySetInnerHTML={{ __html: selectedEmail.body }}
+                  />
+                </div>
               </div>
             </div>
             <div className="mt-8 flex justify-end gap-3">
