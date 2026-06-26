@@ -2,7 +2,7 @@ import requests
 import time
 import os
 
-BASE_URL = "http://localhost:8000/api/v1"
+BASE_URL = "http://localhost:8081/api/v1"
 
 def run_test():
     print("Starting End-to-End Test...")

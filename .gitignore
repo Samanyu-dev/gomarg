@@ -1,14 +1,67 @@
-# Backend
-backend/venv/
-backend/__pycache__/
-backend/*.pyc
-backend/.env
+# -----------------------
+# General / OS
+# -----------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+*.swp
+*~
+*.log
 
-# Frontend
+# -----------------------
+# Environment Variables
+# -----------------------
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# -----------------------
+# Frontend (Node.js / Next.js)
+# -----------------------
 frontend/node_modules/
+frontend/.pnp
+frontend/.pnp.js
+frontend/coverage/
 frontend/.next/
 frontend/out/
-frontend/.env.local
+frontend/build/
+frontend/dist/
+frontend/.vercel/
+frontend/.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# OS
-.DS_Store
+# -----------------------
+# Backend (Python / FastAPI)
+# -----------------------
+backend/venv/
+backend/.venv/
+backend/env/
+__pycache__/
+backend/*.py[cod]
+backend/*$py.class
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
+backend/dist/
+backend/build/
+backend/*.egg-info/
+backend/.mypy_cache/
+
+# -----------------------
+# Docker / Infra Data
+# -----------------------
+postgres_data/
+n8n_data/
+data/

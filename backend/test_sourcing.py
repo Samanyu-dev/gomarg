@@ -2,7 +2,7 @@ import requests
 import time
 import os
 
-BASE_URL = "http://localhost:8000/api/v1"
+BASE_URL = "http://localhost:8081/api/v1"
 
 def run_test():
     print("Starting Apollo Lead Sourcing Test...")
@@ -42,8 +42,10 @@ def run_test():
     print("2. Testing Apollo Sourcing Pipeline...")
     
     search_payload = {
+        "role": "Product Manager",
+        "company": "Stripe",
         "page": 1,
-        "per_page": 10
+        "per_page": 3
     }
     
     print(f"   Searching for: {search_payload}")

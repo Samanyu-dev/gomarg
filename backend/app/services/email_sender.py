@@ -55,13 +55,20 @@ class EmailSenderService:
             await self.session.commit()
             return True
 
+        is_html = "<" in email_record.body and ">" in email_record.body
+        
         payload = {
             "sender": {"email": settings.BREVO_SENDER_EMAIL, "name": "GoMarg AI"},
             "to": [{"email": lead.email, "name": f"{lead.first_name or ''} {lead.last_name or ''}".strip()}],
             "subject": email_record.subject,
-            "textContent": email_record.body,
             "replyTo": {"email": settings.BREVO_SENDER_EMAIL}
         }
+        
+        if is_html:
+            payload["htmlContent"] = email_record.body
+        else:
+            payload["textContent"] = email_record.body
+
         
         headers = {
             "accept": "application/json",

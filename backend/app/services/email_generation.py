@@ -249,47 +249,31 @@ Return a JSON object with exactly three keys:
         # Determine tone based on step order
         tone_config = STEP_TONE_MAP.get(step.order_index, DEFAULT_TONE)
 
-        # Step config can override the campaign goal
-        step_goal = step.config.get("goal") or campaign.settings.get("goal") or "Book a 15-minute discovery call"
-
-        prompt = f"""
-You are {tone_config["persona"]}. You are writing a {tone_config["label"]} email.
-
-TARGET LEAD:
-  Name: {lead.first_name} {lead.last_name}
-  Title: {lead.job_title}
-  Company: {lead.company}
-  Location: {lead.city or ""}, {lead.country or ""}
-  Industry: {lead.industry or ""}
-  Lead Score: {lead.lead_score} (cold/low/warm/hot)
-
-CAMPAIGN GOAL: {step_goal}
-
-RESEARCH (use this for personalisation — reference specific details):
-{research_context}
-
-PREVIOUS EMAILS SENT TO THIS LEAD (do NOT repeat these; build on them):
-{email_history or "This is the first email to this lead."}
-
-ENGAGEMENT HISTORY:
-{engagement_summary or "No engagement data yet."}
-
-TONE: {tone_config["tone"]}
-CALL TO ACTION: End with {tone_config["cta"]}.
-
-RULES:
-- Under 120 words for the body
-- Never use the word "synergy", "leverage", or "circle back"
-- Do not start with "I hope this email finds you well"
-- Reference at least one specific detail from the Research section
-- Sound like a human, not a bot
-- If this is a follow-up and you know the lead opened a previous email, acknowledge it subtly
-
-Return a JSON object with exactly two keys: "subject" (string) and "body" (string).
-The body should include a greeting and sign-off. Use plain text, no markdown.
+        url = "https://www.getrightdata.com/solutions/industry/insurance/whitepaper?utm_content=learn_more_button&utm_source=brevo&utm_medium=email&utm_campaign=Insurance%20Outreach%20Batch%207%20%20June%202026&utm_id=74"
+        html_body = f"""
+<div style="font-family: Arial, sans-serif; font-size: 14px; color: #333; line-height: 1.6;">
+    <p>Hi {lead.first_name or 'there'},</p>
+    <br/>
+    <p>Around 68% of enterprise AI initiatives slow down because of inconsistent and poorly governed data.</p>
+    <br/>
+    <p>How is {lead.company or 'your team'} approaching this challenge?</p>
+    <br/>
+    <p>RightData supports insurers in building trusted, governed data foundations that enable reliable AI and automation.</p>
+    <br/>
+    <p>Learn how insurers are approaching this challenge through a few practical approaches and use cases.</p>
+    <br/>
+    <p style="text-align: center; margin: 30px 0;">
+        <a href="{url}" style="display: inline-block; padding: 12px 30px; background-color: #1a2b3c; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: bold;">Learn More</a>
+    </p>
+    <br/>
+    <p>Regards,<br>Akhil Viswan<br>Team RightData</p>
+</div>
 """
-
-        email_data = await self._call_gemini(prompt, EmailOutput)
+        
+        email_data = {
+            "subject": "AI Needs Trust",
+            "body": html_body
+        }
         return await self._save_email(
             lead=lead,
             campaign=campaign,
