@@ -61,3 +61,4 @@ vine==5.1.0
 wcwidth==0.8.1
 websockets==15.0.1
 ddgs==9.8.0
+exa-py

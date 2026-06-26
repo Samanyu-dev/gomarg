@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     BREVO_SENDER_EMAIL: str = "hello@gomarg.com"
     
     APOLLO_API_KEY: str = ""
+    EXA_API_KEY: str = ""
 
     DATABASE_URL: Optional[str] = None
 
