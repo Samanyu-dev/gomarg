@@ -407,9 +407,10 @@ export default function SourcingPage() {
               </div>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Body</label>
-                <div className="mt-1 p-4 bg-secondary/30 rounded-lg border border-white/5 whitespace-pre-wrap text-sm leading-relaxed">
-                  {selectedEmail.full_body}
-                </div>
+                <div 
+                  className="mt-1 p-4 bg-secondary/30 rounded-lg border border-white/5 whitespace-pre-wrap text-sm leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: selectedEmail.full_body }}
+                />
               </div>
             </div>
             <div className="mt-8 flex justify-end">
